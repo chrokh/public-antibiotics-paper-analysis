@@ -87,13 +87,12 @@ sumPropAtYear <- function(n, prop, time, timeto) {
   apply(propAtYear(n, prop, time, timeto), 1, sum)
 }
 propPerYear <- function(start, years, prop, time, timeto) {
-  df <- data.frame(subject=1:nrow(prop)) # Add id col
+  df <- data.frame()
   for (year in start:(start+years-1)) {
-    y   <- sumPropAtYear(year, prop, time, timeto)
-    df[paste('prop', year, sep='_')] = y
+    subject <- 1:nrow(prop)
+    value   <- sumPropAtYear(year, prop, time, timeto)
+    df <- rbind(df, data.frame(subject=subject, year=year, value=value))
   }
-  df <- reshape(df, varying=c(1:years+1), direction='long', idvar='subject', sep='_')
-  names(df) <- c('subject', 'year', 'value')
   df
 }
 
@@ -104,4 +103,3 @@ boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1)
 # Plot: revenue per year
 rpy <- propPerYear(10, 21, revenue, time, timeto)
 boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1)
-
