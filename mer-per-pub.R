@@ -98,8 +98,8 @@ propPerYear <- function(start, years, prop, time, timeto) {
 
 # Plot: cost per year
 cpy <- propPerYear(1, 14, cost, time, timeto)
-boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1)
+boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1, main='Cost per year')
 
 # Plot: revenue per year
 rpy <- propPerYear(10, 21, revenue, time, timeto)
-boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1)
+boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1, main='Revenue per year')
