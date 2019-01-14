@@ -44,6 +44,14 @@ revenue <- rep(0, N)
 p4      <- data.frame(time, cost, prob, revenue, discount.rate)
 p4$timeto <- p3$timeto + p3$time
 
+# Sample: Market
+time    <- 10
+prob    <- 1
+cost    <- 0
+revenue <- runif(N, min=218, max=2500)
+m       <- data.frame(time, cost, prob, revenue, discount.rate)
+
+
 
 # Summarize
 boxplot(pc$cost, p1$cost, p2$cost, p3$cost, p4$cost, ylab='cost', las=2, main='Cost')
@@ -62,8 +70,9 @@ revenue <- data.frame(pc=pc$revenue, p1=p1$revenue, p2=p2$revenue, p3=p3$revenue
 timeto  <- data.frame(pc$timeto, p1$timeto, p2$timeto, p3$timeto, p4$timeto)
 
 
-# TODO: Does not work for prob cuz of product rather than sum!
+# Helper funtions
 propAtYear <- function(n, prop, time, timeto) {
+# TODO: Does not work for prob cuz of product rather than sum!
   unit      <- prop / time
   ongoing   <- n <= floor(time + timeto) & n >= timeto
   last      <- n == ceiling(timeto + time)
@@ -83,6 +92,7 @@ propPerYear <- function(start, years, prop, time, timeto) {
   df
 }
 
+
 # Plot: cost per year
 cpy <- propPerYear(1, 14, cost, time, timeto)
 boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1, main='Cost per year')
@@ -90,3 +100,15 @@ boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1, main='Cost per ye
 # Plot: revenue per year
 rpy <- propPerYear(10, 21, revenue, time, timeto)
 boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1, main='Revenue per year')
+
+# Plot: revenue per market year
+rpmy <- data.frame()
+m$revenue.y1 <- 0
+m$revenue.y2 <- m$revenue * 2 / (m$time + 1)  # compute pys
+m$revenue.m  <- m$revenue.y2 / m$time         # compute slope
+for (yr in 1:10) {
+  subject <- 1:nrow(m)
+  rev     <- ifelse(yr <= m$time, m$revenue.m * yr, 0)
+  rpmy    <- rbind(rpmy, data.frame(subject=subject, year=yr, revenue=rev))
+}
+boxplot(rpmy$revenue ~ rpmy$year, xlab='year', ylab='revenue', las=1, main='revenue per market year')
