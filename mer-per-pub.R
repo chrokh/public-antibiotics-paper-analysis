@@ -54,25 +54,12 @@ boxplot(pc$time, p1$time, p2$time, p3$time, p4$time, ylab='time', las=2, main='T
 axis(1, at=seq(1,7), labels=seq(0,6))
 
 
-# Make cost dataframe
-cost <- data.frame(pc$cost, p1$cost, p2$cost, p3$cost, p4$cost)
-names(cost) <- c('pc', 'p1', 'p2', 'p3', 'p4')
-
-# Make prob dataframe
-prob <- data.frame(pc$prob, p1$prob, p2$prob, p3$prob, p4$prob)
-names(prob) <- c('pc', 'p1', 'p2', 'p3', 'p4')
-
-# Make time dataframe
-time <- data.frame(pc$time, p1$time, p2$time, p3$time, p4$time)
-names(time) <- c('pc', 'p1', 'p2', 'p3', 'p4')
-
-# Make revenue dataframe
-revenue <- data.frame(pc$revenue, p1$revenue, p2$revenue, p3$revenue, p4$revenue)
-names(revenue) <- c('pc', 'p1', 'p2', 'p3', 'p4')
-
-# Make timeto dataframe
-timeto <- data.frame(pc$timeto, p1$timeto, p2$timeto, p3$timeto, p4$timeto)
-names(timeto) <- c('pc', 'p1', 'p2', 'p3', 'p4')
+# Make prop specific data frames
+cost    <- data.frame(pc=pc$cost, p1=p1$cost, p2=p2$cost, p3=p3$cost, p4=p4$cost)
+prob    <- data.frame(pc=pc$prob, p1=p1$prob, p2=p2$prob, p3=p3$prob, p4=p4$prob)
+time    <- data.frame(pc=pc$time, p1=p1$time, p2=p2$time, p3=p3$time, p4=p4$time)
+revenue <- data.frame(pc=pc$revenue, p1=p1$revenue, p2=p2$revenue, p3=p3$revenue, p4=p4$revenue)
+timeto  <- data.frame(pc$timeto, p1$timeto, p2$timeto, p3$timeto, p4$timeto)
 
 
 # TODO: Does not work for prob cuz of product rather than sum!
