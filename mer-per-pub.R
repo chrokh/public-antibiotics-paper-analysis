@@ -55,21 +55,18 @@ obs$m.revenue        <- runif(N, min=218, max=2500)
 obs$m.discount.rate  <- discount.rate
 
 
-# Summarize
-boxplot(obs$pc.cost, obs$p1.cost, obs$p2.cost, obs$p3.cost, obs$p4.cost, ylab='cost', las=2, main='Cost')
-axis(1, at=seq(1,7), labels=seq(0,6))
-boxplot(obs$pc.prob, obs$p1.prob, obs$p2.prob, obs$p3.prob, obs$p4.prob, ylab='prob', las=2, main='Prob')
-axis(1, at=seq(1,7), labels=seq(0,6))
-boxplot(obs$pc.time, obs$obs.p1.time, obs$p2.time, obs$p3.time, obs$p4.time, ylab='time', las=2, main='Time')
-axis(1, at=seq(1,7), labels=seq(0,6))
-
-
 # Make prop specific data frames
 cost    <- data.frame(pc=obs$pc.cost, p1=obs$p1.cost, p2=obs$p2.cost, p3=obs$p3.cost, p4=obs$p4.cost)
 prob    <- data.frame(pc=obs$pc.prob, p1=obs$p1.prob, p2=obs$p2.prob, p3=obs$p3.prob, p4=obs$p4.prob)
 time    <- data.frame(pc=obs$pc.time, p1=obs$p1.time, p2=obs$p2.time, p3=obs$p3.time, p4=obs$p4.time)
 revenue <- data.frame(pc=obs$pc.revenue, p1=obs$p1.revenue, p2=obs$p2.revenue, p3=obs$p3.revenue, p4=obs$p4.revenue)
 timeto  <- data.frame(obs$pc.timeto, obs$p1.timeto, obs$p2.timeto, obs$p3.timeto, obs$p4.timeto)
+
+
+# Summarize
+boxplot(cost, ylab='cost', main='Cost', las=1)
+boxplot(prob, ylab='Prob', main='Prob', las=1)
+boxplot(time, ylab='Time', main='Time', las=1)
 
 
 # Helper funtions
