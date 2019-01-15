@@ -64,9 +64,9 @@ timeto  <- data.frame(obs$pc.timeto, obs$p1.timeto, obs$p2.timeto, obs$p3.timeto
 
 
 # Summarize
-boxplot(cost, ylab='cost', main='Cost', las=1)
-boxplot(prob, ylab='Prob', main='Prob', las=1)
-boxplot(time, ylab='Time', main='Time', las=1)
+boxplot(cost, ylab='USD (million)', main='Phase cost', las=1)
+boxplot(prob, ylab='Probability', main='Technical probability of phase completion', las=1)
+boxplot(time, ylab='Months', main='Phase duration', las=1)
 
 
 # Helper funtions
@@ -94,11 +94,11 @@ propPerYear <- function(start, years, prop, time, timeto) {
 
 # Plot: cost per year
 cpy <- propPerYear(1, 14, cost, time, timeto)
-boxplot(cpy$value ~ cpy$year, xlab='year', ylab='cost', las=1, main='Cost per year')
+boxplot(cpy$value ~ cpy$year, xlab='Year', ylab='USD (million)', las=1, main='Cost per year')
 
 # Plot: revenue per year
 rpy <- propPerYear(10, 21, revenue, time, timeto)
-boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1, main='Revenue per year')
+boxplot(rpy$value ~ rpy$year, xlab='Year', ylab='USD (million)', las=1, main='Revenue per year (excluding sales)')
 
 # Plot: revenue per market year
 rpmy <- data.frame()
@@ -110,4 +110,4 @@ for (yr in 1:10) {
   rev     <- ifelse(yr <= obs$m.time, obs$m.revenue.m * yr, 0)
   rpmy    <- rbind(rpmy, data.frame(subject=subject, year=yr, revenue=rev))
 }
-boxplot(rpmy$revenue ~ rpmy$year, xlab='year', ylab='revenue', las=1, main='revenue per market year')
+boxplot(rpmy$revenue ~ rpmy$year, xlab='Market year', ylab='USD (million)', las=1, main='Revenue per market year')
