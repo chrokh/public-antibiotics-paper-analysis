@@ -60,7 +60,7 @@ cost    <- data.frame(pc=obs$pc.cost, p1=obs$p1.cost, p2=obs$p2.cost, p3=obs$p3.
 prob    <- data.frame(pc=obs$pc.prob, p1=obs$p1.prob, p2=obs$p2.prob, p3=obs$p3.prob, p4=obs$p4.prob)
 time    <- data.frame(pc=obs$pc.time, p1=obs$p1.time, p2=obs$p2.time, p3=obs$p3.time, p4=obs$p4.time)
 revenue <- data.frame(pc=obs$pc.revenue, p1=obs$p1.revenue, p2=obs$p2.revenue, p3=obs$p3.revenue, p4=obs$p4.revenue)
-timeto  <- data.frame(obs$pc.timeto, obs$p1.timeto, obs$p2.timeto, obs$p3.timeto, obs$p4.timeto)
+timeto  <- data.frame(pc=obs$pc.timeto, p1=obs$p1.timeto, p2=obs$p2.timeto, p3=obs$p3.timeto, p4=obs$p4.timeto)
 
 
 # Summarize
