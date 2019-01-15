@@ -1,73 +1,75 @@
 set.seed(2)
 N = 3
 
+# Create dataset for sampling
+obs <- data.frame(subject=1:N)
+
 # Sample: Discount rate
 discount.rate <- runif(N, 0.09, 0.24)
 
 # Sample: Pre-clinical
-time    <- runif(N, min=4.3, max=6)
-prob    <- runif(N, min=0.175, max=0.69)
-cost    <- runif(N, min=19, max=23.2)
-revenue <- rep(0, N)
-pc      <- data.frame(time, cost, prob, revenue, discount.rate)
-pc$timeto <- 0
+obs$pc.time          <- runif(N, min=4.3, max=6)
+obs$pc.prob          <- runif(N, min=0.175, max=0.69)
+obs$pc.cost          <- runif(N, min=19, max=23.2)
+obs$pc.revenue       <- rep(0, N)
+obs$pc.timeto        <- 0
+obs$pc.discount.rate <- discount.rate
 
 # Sample: Phase 1
-time    <- runif(N, min=0.75, max=1.8)
-prob    <- runif(N, min=0.25, max=0.837)
-cost    <- runif(N, min=7.3, max=12)
-revenue <- rep(0, N)
-p1      <- data.frame(time, cost, prob, revenue, discount.rate)
-p1$timeto <- pc$timeto + pc$time
+obs$p1.time          <- runif(N, min=0.75, max=1.8)
+obs$p1.prob          <- runif(N, min=0.25, max=0.837)
+obs$p1.cost          <- runif(N, min=7.3, max=12)
+obs$p1.revenue       <- rep(0, N)
+obs$p1.timeto        <- obs$pc.timeto + obs$pc.time
+obs$p1.discount.rate <- discount.rate
 
 # Sample: Phase 2
-time    <- runif(N, min=0.75, max=2.5)
-prob    <- runif(N, min=0.34, max=0.74)
-cost    <- runif(N, min=7.12, max=18.72)
-revenue <- rep(0, N)
-p2      <- data.frame(time, cost, prob, revenue, discount.rate)
-p2$timeto <- p1$timeto + p1$time
+obs$p2.time          <- runif(N, min=0.75, max=2.5)
+obs$p2.prob          <- runif(N, min=0.34, max=0.74)
+obs$p2.cost          <- runif(N, min=7.12, max=18.72)
+obs$p2.revenue       <- rep(0, N)
+obs$p2.timeto        <- obs$p1.timeto + obs$p1.time
+obs$p2.discount.rate <- discount.rate
 
 # Sample: Phase 3
-time    <- runif(N, min=0.83, max=3.9)
-prob    <- runif(N, min=0.314, max=0.786)
-cost    <- runif(N, min=26.88, max=121.68)
-revenue <- rep(0, N)
-p3      <- data.frame(time, cost, prob, revenue, discount.rate)
-p3$timeto <- p2$timeto + p2$time
+obs$p3.time          <- runif(N, min=0.83, max=3.9)
+obs$p3.prob          <- runif(N, min=0.314, max=0.786)
+obs$p3.cost          <- runif(N, min=26.88, max=121.68)
+obs$p3.revenue       <- rep(0, N)
+obs$p3.timeto        <- obs$p2.timeto + obs$p2.time
+obs$p3.discount.rate <- discount.rate
 
 # Sample: Phase 4
-time    <- runif(N, min=0.5, max=1.04)
-prob    <- runif(N, min=0.83, max=0.99)
-cost    <- rep(98.297168, N)
-revenue <- rep(0, N)
-p4      <- data.frame(time, cost, prob, revenue, discount.rate)
-p4$timeto <- p3$timeto + p3$time
+obs$p4.time          <- runif(N, min=0.5, max=1.04)
+obs$p4.prob          <- runif(N, min=0.83, max=0.99)
+obs$p4.cost          <- rep(98.297168, N)
+obs$p4.revenue       <- rep(0, N)
+obs$p4.timeto        <- obs$p3.timeto + obs$p3.time
+obs$p4.discount.rate <- discount.rate
 
 # Sample: Market
-time    <- 10
-prob    <- 1
-cost    <- 0
-revenue <- runif(N, min=218, max=2500)
-m       <- data.frame(time, cost, prob, revenue, discount.rate)
-
+obs$m.time           <- 10
+obs$m.prob           <- 1
+obs$m.cost           <- 0
+obs$m.revenue        <- runif(N, min=218, max=2500)
+obs$m.discount.rate  <- discount.rate
 
 
 # Summarize
-boxplot(pc$cost, p1$cost, p2$cost, p3$cost, p4$cost, ylab='cost', las=2, main='Cost')
+boxplot(obs$pc.cost, obs$p1.cost, obs$p2.cost, obs$p3.cost, obs$p4.cost, ylab='cost', las=2, main='Cost')
 axis(1, at=seq(1,7), labels=seq(0,6))
-boxplot(pc$prob, p1$prob, p2$prob, p3$prob, p4$prob, ylab='prob', las=2, main='Prob')
+boxplot(obs$pc.prob, obs$p1.prob, obs$p2.prob, obs$p3.prob, obs$p4.prob, ylab='prob', las=2, main='Prob')
 axis(1, at=seq(1,7), labels=seq(0,6))
-boxplot(pc$time, p1$time, p2$time, p3$time, p4$time, ylab='time', las=2, main='Time')
+boxplot(obs$pc.time, obs$obs.p1.time, obs$p2.time, obs$p3.time, obs$p4.time, ylab='time', las=2, main='Time')
 axis(1, at=seq(1,7), labels=seq(0,6))
 
 
 # Make prop specific data frames
-cost    <- data.frame(pc=pc$cost, p1=p1$cost, p2=p2$cost, p3=p3$cost, p4=p4$cost)
-prob    <- data.frame(pc=pc$prob, p1=p1$prob, p2=p2$prob, p3=p3$prob, p4=p4$prob)
-time    <- data.frame(pc=pc$time, p1=p1$time, p2=p2$time, p3=p3$time, p4=p4$time)
-revenue <- data.frame(pc=pc$revenue, p1=p1$revenue, p2=p2$revenue, p3=p3$revenue, p4=p4$revenue)
-timeto  <- data.frame(pc$timeto, p1$timeto, p2$timeto, p3$timeto, p4$timeto)
+cost    <- data.frame(pc=obs$pc.cost, p1=obs$p1.cost, p2=obs$p2.cost, p3=obs$p3.cost, p4=obs$p4.cost)
+prob    <- data.frame(pc=obs$pc.prob, p1=obs$p1.prob, p2=obs$p2.prob, p3=obs$p3.prob, p4=obs$p4.prob)
+time    <- data.frame(pc=obs$pc.time, p1=obs$p1.time, p2=obs$p2.time, p3=obs$p3.time, p4=obs$p4.time)
+revenue <- data.frame(pc=obs$pc.revenue, p1=obs$p1.revenue, p2=obs$p2.revenue, p3=obs$p3.revenue, p4=obs$p4.revenue)
+timeto  <- data.frame(obs$pc.timeto, obs$p1.timeto, obs$p2.timeto, obs$p3.timeto, obs$p4.timeto)
 
 
 # Helper funtions
@@ -103,12 +105,12 @@ boxplot(rpy$value ~ rpy$year, xlab='year', ylab='revenue', las=1, main='Revenue 
 
 # Plot: revenue per market year
 rpmy <- data.frame()
-m$revenue.y1 <- 0
-m$revenue.y2 <- m$revenue * 2 / (m$time + 1)  # compute pys
-m$revenue.m  <- m$revenue.y2 / m$time         # compute slope
+obs$m.revenue.y1 <- 0
+obs$m.revenue.y2 <- obs$m.revenue * 2 / (obs$m.time + 1)  # compute pys
+obs$m.revenue.m  <- obs$m.revenue.y2 / obs$m.time         # compute slope
 for (yr in 1:10) {
-  subject <- 1:nrow(m)
-  rev     <- ifelse(yr <= m$time, m$revenue.m * yr, 0)
+  subject <- 1:nrow(obs)
+  rev     <- ifelse(yr <= obs$m.time, obs$m.revenue.m * yr, 0)
   rpmy    <- rbind(rpmy, data.frame(subject=subject, year=yr, revenue=rev))
 }
 boxplot(rpmy$revenue ~ rpmy$year, xlab='year', ylab='revenue', las=1, main='revenue per market year')
