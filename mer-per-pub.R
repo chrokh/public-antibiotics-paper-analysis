@@ -13,7 +13,6 @@ obs$pc.time          <- runif(N, min=4.3, max=6)
 obs$pc.prob          <- runif(N, min=0.175, max=0.69)
 obs$pc.cost          <- runif(N, min=19, max=23.2)
 obs$pc.revenue       <- rep(0, N)
-obs$pc.timeto        <- 0
 obs$pc.discount.rate <- discount.rate
 
 # Sample: Phase 1
@@ -21,7 +20,6 @@ obs$p1.time          <- runif(N, min=0.75, max=1.8)
 obs$p1.prob          <- runif(N, min=0.25, max=0.837)
 obs$p1.cost          <- runif(N, min=7.3, max=12)
 obs$p1.revenue       <- rep(0, N)
-obs$p1.timeto        <- obs$pc.timeto + obs$pc.time
 obs$p1.discount.rate <- discount.rate
 
 # Sample: Phase 2
@@ -29,7 +27,6 @@ obs$p2.time          <- runif(N, min=0.75, max=2.5)
 obs$p2.prob          <- runif(N, min=0.34, max=0.74)
 obs$p2.cost          <- runif(N, min=7.12, max=18.72)
 obs$p2.revenue       <- rep(0, N)
-obs$p2.timeto        <- obs$p1.timeto + obs$p1.time
 obs$p2.discount.rate <- discount.rate
 
 # Sample: Phase 3
@@ -37,7 +34,6 @@ obs$p3.time          <- runif(N, min=0.83, max=3.9)
 obs$p3.prob          <- runif(N, min=0.314, max=0.786)
 obs$p3.cost          <- runif(N, min=26.88, max=121.68)
 obs$p3.revenue       <- rep(0, N)
-obs$p3.timeto        <- obs$p2.timeto + obs$p2.time
 obs$p3.discount.rate <- discount.rate
 
 # Sample: Phase 4
@@ -45,7 +41,6 @@ obs$p4.time          <- runif(N, min=0.5, max=1.04)
 obs$p4.prob          <- runif(N, min=0.83, max=0.99)
 obs$p4.cost          <- rep(98.297168, N)
 obs$p4.revenue       <- rep(0, N)
-obs$p4.timeto        <- obs$p3.timeto + obs$p3.time
 obs$p4.discount.rate <- discount.rate
 
 # Sample: Market
@@ -54,6 +49,22 @@ obs$m.prob           <- 1
 obs$m.cost           <- 0
 obs$m.revenue        <- runif(N, min=218, max=2500)
 obs$m.discount.rate  <- discount.rate
+
+# Compute: Time to phase
+obs$pc.timeto        <- 0
+obs$p1.timeto        <- obs$pc.timeto + obs$pc.time
+obs$p2.timeto        <- obs$p1.timeto + obs$p1.time
+obs$p3.timeto        <- obs$p2.timeto + obs$p2.time
+obs$p4.timeto        <- obs$p3.timeto + obs$p3.time
+obs$m.timeto         <- obs$p4.timeto + obs$p4.time
+
+# Compute: Probability
+obs$m.prob.remaining  <- 1
+obs$p4.prob.remaining <- obs$m.prob.remaining  * obs$p4.prob
+obs$p3.prob.remaining <- obs$p4.prob.remaining * obs$p3.prob
+obs$p2.prob.remaining <- obs$p3.prob.remaining * obs$p2.prob
+obs$p1.prob.remaining <- obs$p2.prob.remaining * obs$p1.prob
+obs$pc.prob.remaining <- obs$p1.prob.remaining * obs$pc.prob
 
 
 # Make prop specific data frames
