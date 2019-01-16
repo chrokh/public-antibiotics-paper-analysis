@@ -1,5 +1,6 @@
 set.seed(2)
-N = 3
+N     = 3
+YEARS = 8
 
 # Create dataset for sampling
 obs <- data.frame(subject=1:N)
@@ -78,21 +79,7 @@ propAtYear <- function(n, prop, time, timeto) {
   remainder <- prop - unit * floor(time)
   (ongoing * unit) + (last * remainder)
 }
-sumPropAtYear <- function(n, prop, time, timeto) {
-  apply(propAtYear(n, prop, time, timeto), 1, sum)
-}
-propPerYear <- function(start, years, prop, time, timeto) {
-  df <- data.frame()
-  for (year in start:(start+years-1)) {
-    subject <- 1:nrow(prop)
-    value   <- sumPropAtYear(year, prop, time, timeto)
-    df <- rbind(df, data.frame(subject=subject, year=year, value=value))
-  }
-  df
-}
 
-
-YEARS <- 20 # TODO: Should be a variable?
 
 # Compute: revenue per market year
 rpmy <- data.frame()
@@ -106,17 +93,23 @@ for (yr in 1:YEARS) {
 }
 
 # Compute: cost per year
-cpy <- propPerYear(1, YEARS, cost, time, timeto)
-names(cpy) <- c('subject', 'year', 'cost')
+cpy <- data.frame()
+for (year in 1:YEARS) {
+  value <- apply(propAtYear(year, cost, time, timeto), 1, sum)
+  cpy   <- rbind(cpy, data.frame(subject=1:nrow(cost), year=year, cost=value))
+}
 
 # Compute: revenue per year
-rpy <- propPerYear(1, YEARS, revenue, time, timeto)
-names(rpy) <- c('subject', 'year', 'revenue')
+rpy <- data.frame()
+for (year in 1:YEARS) {
+  value <- apply(propAtYear(year, revenue, time, timeto), 1, sum)
+  rpy   <- rbind(rpy, data.frame(subject=1:nrow(revenue), year=year, revenue=value))
+}
 
 
 # Combine yearly data into single data frame
 yearly <- cpy
-yearly <- merge(yearly, rpy, by=c('subject', 'year'))
+yearly <- merge(yearly, rpy, by=c('year', 'subject'))
 yearly$cashflow <- yearly$revenue - yearly$cost
 
 
