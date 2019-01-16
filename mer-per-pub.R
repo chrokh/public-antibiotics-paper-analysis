@@ -92,22 +92,42 @@ propPerYear <- function(start, years, prop, time, timeto) {
 }
 
 
-# Plot: cost per year
-cpy <- propPerYear(1, 14, cost, time, timeto)
-boxplot(cpy$value ~ cpy$year, xlab='Year', ylab='USD (million)', las=1, main='Cost per year')
+YEARS <- 20 # TODO: Should be a variable?
 
-# Plot: revenue per year
-rpy <- propPerYear(10, 21, revenue, time, timeto)
-boxplot(rpy$value ~ rpy$year, xlab='Year', ylab='USD (million)', las=1, main='Revenue per year (excluding sales)')
-
-# Plot: revenue per market year
+# Compute: revenue per market year
 rpmy <- data.frame()
 obs$m.revenue.y1 <- 0
 obs$m.revenue.y2 <- obs$m.revenue * 2 / (obs$m.time + 1)  # compute pys
 obs$m.revenue.m  <- obs$m.revenue.y2 / obs$m.time         # compute slope
-for (yr in 1:10) {
+for (yr in 1:YEARS) {
   subject <- 1:nrow(obs)
   rev     <- ifelse(yr <= obs$m.time, obs$m.revenue.m * yr, 0)
   rpmy    <- rbind(rpmy, data.frame(subject=subject, year=yr, revenue=rev))
 }
+
+# Compute: cost per year
+cpy <- propPerYear(1, YEARS, cost, time, timeto)
+names(cpy) <- c('subject', 'year', 'cost')
+
+# Compute: revenue per year
+rpy <- propPerYear(1, YEARS, revenue, time, timeto)
+names(rpy) <- c('subject', 'year', 'revenue')
+
+
+# Combine yearly data into single data frame
+yearly <- cpy
+yearly <- merge(yearly, rpy, by=c('subject', 'year'))
+yearly$cashflow <- yearly$revenue - yearly$cost
+
+
+# Plot: cost per year
+boxplot(yearly$cost ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Cost per year')
+
+# Plot: revenue per year
+boxplot(yearly$revenue ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Revenue per year (excluding sales)')
+
+# Plot: revenue per market year
 boxplot(rpmy$revenue ~ rpmy$year, xlab='Market year', ylab='USD (million)', las=1, main='Revenue per market year')
+
+# Plot: cashflow per year
+boxplot(yearly$cashflow ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Cashflow per year')
