@@ -1,53 +1,45 @@
 set.seed(2)
 N     = 3
-YEARS = 8
+YEARS = 25
 
 # Create dataset for sampling
 obs <- data.frame(subject=1:N)
 
-# Sample: Discount rate
-discount.rate <- runif(N, 0.09, 0.24)
-
 # Sample: Pre-clinical
 obs$pc.time          <- runif(N, min=4.3, max=6)
-obs$pc.prob          <- runif(N, min=0.175, max=0.69)
-obs$pc.cost          <- runif(N, min=19, max=23.2)
-obs$pc.revenue       <- rep(0, N)
-obs$pc.discount.rate <- discount.rate
-
-# Sample: Phase 1
 obs$p1.time          <- runif(N, min=0.75, max=1.8)
-obs$p1.prob          <- runif(N, min=0.25, max=0.837)
-obs$p1.cost          <- runif(N, min=7.3, max=12)
-obs$p1.revenue       <- rep(0, N)
-obs$p1.discount.rate <- discount.rate
-
-# Sample: Phase 2
 obs$p2.time          <- runif(N, min=0.75, max=2.5)
-obs$p2.prob          <- runif(N, min=0.34, max=0.74)
-obs$p2.cost          <- runif(N, min=7.12, max=18.72)
-obs$p2.revenue       <- rep(0, N)
-obs$p2.discount.rate <- discount.rate
-
-# Sample: Phase 3
 obs$p3.time          <- runif(N, min=0.83, max=3.9)
-obs$p3.prob          <- runif(N, min=0.314, max=0.786)
-obs$p3.cost          <- runif(N, min=26.88, max=121.68)
-obs$p3.revenue       <- rep(0, N)
-obs$p3.discount.rate <- discount.rate
-
-# Sample: Phase 4
 obs$p4.time          <- runif(N, min=0.5, max=1.04)
-obs$p4.prob          <- runif(N, min=0.83, max=0.99)
-obs$p4.cost          <- rep(98.297168, N)
-obs$p4.revenue       <- rep(0, N)
-obs$p4.discount.rate <- discount.rate
-
-# Sample: Market
 obs$m.time           <- 10
+
+obs$pc.prob          <- runif(N, min=0.175, max=0.69)
+obs$p1.prob          <- runif(N, min=0.25, max=0.837)
+obs$p2.prob          <- runif(N, min=0.34, max=0.74)
+obs$p3.prob          <- runif(N, min=0.314, max=0.786)
+obs$p4.prob          <- runif(N, min=0.83, max=0.99)
 obs$m.prob           <- 1
+
+obs$pc.cost          <- runif(N, min=19, max=23.2)
+obs$p1.cost          <- runif(N, min=7.3, max=12)
+obs$p2.cost          <- runif(N, min=7.12, max=18.72)
+obs$p3.cost          <- runif(N, min=26.88, max=121.68)
+obs$p4.cost          <- rep(98.297168, N)
 obs$m.cost           <- 0
+
+obs$pc.revenue       <- rep(0, N)
+obs$p1.revenue       <- rep(0, N)
+obs$p2.revenue       <- rep(0, N)
+obs$p3.revenue       <- rep(0, N)
+obs$p4.revenue       <- rep(0, N)
 obs$m.revenue        <- runif(N, min=218, max=2500)
+
+discount.rate <- runif(N, 0.09, 0.24)
+obs$pc.discount.rate <- discount.rate
+obs$p1.discount.rate <- discount.rate
+obs$p2.discount.rate <- discount.rate
+obs$p3.discount.rate <- discount.rate
+obs$p4.discount.rate <- discount.rate
 obs$m.discount.rate  <- discount.rate
 
 # Compute: Time to phase
@@ -74,6 +66,11 @@ time    <- data.frame(pc=obs$pc.time, p1=obs$p1.time, p2=obs$p2.time, p3=obs$p3.
 revenue <- data.frame(pc=obs$pc.revenue, p1=obs$p1.revenue, p2=obs$p2.revenue, p3=obs$p3.revenue, p4=obs$p4.revenue)
 timeto  <- data.frame(pc=obs$pc.timeto, p1=obs$p1.timeto, p2=obs$p2.timeto, p3=obs$p3.timeto, p4=obs$p4.timeto)
 
+# Compute: Market slope
+obs$m.revenue.y1 <- 0
+obs$m.revenue.y2 <- obs$m.revenue * 2 / (obs$m.time + 1)  # compute pys
+obs$m.revenue.m  <- obs$m.revenue.y2 / obs$m.time         # compute slope
+
 
 # Summarize
 boxplot(cost, ylab='USD (million)', main='Phase cost', las=1)
@@ -81,8 +78,8 @@ boxplot(prob, ylab='Probability', main='Technical probability of phase completio
 boxplot(time, ylab='Months', main='Phase duration', las=1)
 
 
-# Helper funtions
-propAtYear <- function(n, prop, time, timeto) {
+# Helper funtion: Splitting prop over years uniformly
+prop.at.year <- function(n, prop, time, timeto) {
 # TODO: Does not work for prob cuz of product rather than sum!
   unit      <- prop / time
   ongoing   <- n <= floor(time + timeto) & n >= timeto
@@ -91,47 +88,30 @@ propAtYear <- function(n, prop, time, timeto) {
   (ongoing * unit) + (last * remainder)
 }
 
-
-# Compute: revenue per market year
-rpmy <- data.frame()
-obs$m.revenue.y1 <- 0
-obs$m.revenue.y2 <- obs$m.revenue * 2 / (obs$m.time + 1)  # compute pys
-obs$m.revenue.m  <- obs$m.revenue.y2 / obs$m.time         # compute slope
-for (yr in 1:YEARS) {
-  subject <- 1:nrow(obs)
-  rev     <- ifelse(yr <= obs$m.time, obs$m.revenue.m * yr, 0)
-  rpmy    <- rbind(rpmy, data.frame(subject=subject, year=yr, revenue=rev))
+# Helper funtion: Splitting sales over years linearly
+sales.at.year <- function(yr) {
+  myr <- yr - obs$m.timeto
+  ifelse(myr <= obs$m.time & myr >= 0, obs$m.revenue.m * myr, 0)
 }
 
-# Compute: cost per year
-cpy <- data.frame()
+
+# Transform: Phasely to yearly
+yearly <- data.frame()
 for (year in 1:YEARS) {
-  value <- apply(propAtYear(year, cost, time, timeto), 1, sum)
-  cpy   <- rbind(cpy, data.frame(subject=1:nrow(cost), year=year, cost=value))
+  yr  <- rep(year, N)
+  cst <- apply(prop.at.year(year, cost, time, timeto), 1, sum)
+  rvn <- apply(prop.at.year(year, revenue, time, timeto), 1, sum)
+  sls <- sales.at.year(year)
+  yearly <- rbind(yearly, data.frame(subject=1:N, year=yr, cost=cst, revenue=rvn, sales=sls))
 }
 
-# Compute: revenue per year
-rpy <- data.frame()
-for (year in 1:YEARS) {
-  value <- apply(propAtYear(year, revenue, time, timeto), 1, sum)
-  rpy   <- rbind(rpy, data.frame(subject=1:nrow(revenue), year=year, revenue=value))
-}
+# Compute: yearly cashflow
+yearly$cashflow <- yearly$revenue + yearly$sales - yearly$cost
 
 
-# Combine yearly data into single data frame
-yearly <- cpy
-yearly <- merge(yearly, rpy, by=c('year', 'subject'))
-yearly$cashflow <- yearly$revenue - yearly$cost
+# Plot: Yearly data
+boxplot(yearly$cost ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Cost per year')
+boxplot(yearly$revenue ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Grants per year')
+boxplot(yearly$sales ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Sales per year')
+boxplot(yearly$cashflow ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Cashflow per year')
 
-
-# Plot: cost per year
-boxplot(yearly$cost ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Cost per year')
-
-# Plot: revenue per year
-boxplot(yearly$revenue ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Revenue per year (excluding sales)')
-
-# Plot: revenue per market year
-boxplot(rpmy$revenue ~ rpmy$year, xlab='Market year', ylab='USD (million)', las=1, main='Revenue per market year')
-
-# Plot: cashflow per year
-boxplot(yearly$cashflow ~ yearly$year, xlab='Year', ylab='USD (million)', las=1, main='Cashflow per year')
