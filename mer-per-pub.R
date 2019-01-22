@@ -10,9 +10,6 @@ N     = 3
 YEARS = 25
 
 
-# Create dataset for sampling
-obs <- data.frame()
-
 # Same across all phases
 discount.rate <- runif(N, 0.09, 0.24)
 
@@ -65,25 +62,26 @@ sales$time          <- 10
 sales$discount.rate <- discount.rate
 
 # Combine all phases into single dataset
-obs <- rbind(obs, pc, p1, p2, p3, sales)
-obs$phase <- factor(obs$phase, levels=c('PC','P1','P2','P3','P4','MP'))
+phasely <- data.frame()
+phasely <- rbind(phasely, pc, p1, p2, p3, sales)
+phasely$phase <- factor(phasely$phase, levels=c('PC','P1','P2','P3','P4','MP'))
 
 
 # Compute: Cashflow
-obs$cashflow <- obs$revenue - obs$cost
+phasely$cashflow <- phasely$revenue - phasely$cost
 
 
 # Summarize
-boxplot(obs$cost~obs$phase, ylab='USD (million)', main='Cost by phase', las=1)
-boxplot(obs$revenue~obs$phase, ylab='USD (million)', main='Revenue by phase', las=1)
-boxplot(obs$cashflow~obs$phase, ylab='USD (million)', main='Cashflow by phase', las=1)
-boxplot(obs$prob~obs$phase, ylab='Probability', main='Technical probability of success by phase', las=1)
-boxplot(obs$time~obs$phase, ylab='Months', main='Duration by phase', las=1)
+boxplot(phasely$cost~phasely$phase, ylab='USD (million)', main='Cost by phase', las=1)
+boxplot(phasely$revenue~phasely$phase, ylab='USD (million)', main='Revenue by phase', las=1)
+boxplot(phasely$cashflow~phasely$phase, ylab='USD (million)', main='Cashflow by phase', las=1)
+boxplot(phasely$prob~phasely$phase, ylab='Probability', main='Technical probability of success by phase', las=1)
+boxplot(phasely$time~phasely$phase, ylab='Months', main='Duration by phase', las=1)
 
 
 
 # Compute: Time to phase
-obs <- obs %>% group_by(subject) %>%
+phasely <- phasely %>% group_by(subject) %>%
   mutate(time.to = cumsum(time) - time,
          time.from = sum(time) - cumsum(time) + time)
 
@@ -93,32 +91,32 @@ obs <- obs %>% group_by(subject) %>%
 # two datasets so that we don't have to deal with exceptions and instead simply
 # assume that everything is either constantly or linearly distributed in the
 # development and market data set respectively.
-obs$cashflow.a <- ifelse(obs$phase=='MP', ((obs$cashflow * 2 / (obs$time + 1)) / obs$time), 0)
-obs$cashflow.b <- ifelse(obs$phase=='MP', 0, (obs$cashflow / obs$time))
-obs$cost.a     <- ifelse(obs$phase=='MP', ((obs$cost * 2 / (obs$time + 1)) / obs$time), 0)
-obs$cost.b     <- ifelse(obs$phase=='MP', 0, (obs$cost / obs$time))
-obs$revenue.a  <- ifelse(obs$phase=='MP', ((obs$revenue * 2 / (obs$time + 1)) / obs$time), 0)
-obs$revenue.b  <- ifelse(obs$phase=='MP', 0, (obs$revenue / obs$time))
-obs$prob.a     <- 0
-obs$prob.b     <- obs$prob ^ (1/obs$time)
+phasely$cashflow.a <- ifelse(phasely$phase=='MP', ((phasely$cashflow * 2 / (phasely$time + 1)) / phasely$time), 0)
+phasely$cashflow.b <- ifelse(phasely$phase=='MP', 0, (phasely$cashflow / phasely$time))
+phasely$cost.a     <- ifelse(phasely$phase=='MP', ((phasely$cost * 2 / (phasely$time + 1)) / phasely$time), 0)
+phasely$cost.b     <- ifelse(phasely$phase=='MP', 0, (phasely$cost / phasely$time))
+phasely$revenue.a  <- ifelse(phasely$phase=='MP', ((phasely$revenue * 2 / (phasely$time + 1)) / phasely$time), 0)
+phasely$revenue.b  <- ifelse(phasely$phase=='MP', 0, (phasely$revenue / phasely$time))
+phasely$prob.a     <- 0
+phasely$prob.b     <- phasely$prob ^ (1/phasely$time)
 
 # Transform: To cashflows over time
 cashflows <- data.frame()
-for (x in 1:ceiling(max(obs$time) + 1)) {
+for (x in 1:ceiling(max(phasely$time) + 1)) {
   # Prepare
-  t              <- x + obs$time.to
-  within_phase   <- x <= obs$time
-  not_whole_year <- x-obs$time>0 & x-obs$time<1
-  discount.rate  <- obs$discount.rate
+  t              <- x + phasely$time.to
+  within_phase   <- x <= phasely$time
+  not_whole_year <- x-phasely$time>0 & x-phasely$time<1
+  discount.rate  <- phasely$discount.rate
   # Compute: yearly
-  base_cashflow      <- ifelse(within_phase, obs$cashflow.a * x + obs$cashflow.b, 0)
-  remainder_cashflow <- ifelse(not_whole_year, (obs$time-floor(obs$time))*(obs$cashflow/obs$time), 0)
-  base_cost          <- ifelse(within_phase, obs$cost.a * x + obs$cost.b, 0)
-  remainder_cost     <- ifelse(not_whole_year, (obs$time-floor(obs$time))*(obs$cost/obs$time), 0)
-  base_revenue       <- ifelse(within_phase, obs$revenue.a * x + obs$revenue.b, 0)
-  remainder_revenue  <- ifelse(not_whole_year, (obs$time-floor(obs$time))*(obs$revenue/obs$time), 0)
-  base_prob          <- ifelse(within_phase, obs$prob.a * x + obs$prob.b, 0)
-  remainder_prob     <- ifelse(not_whole_year, obs$prob / ((obs$prob.a*x+obs$prob.b) ^ floor(obs$time)), 0)
+  base_cashflow      <- ifelse(within_phase, phasely$cashflow.a * x + phasely$cashflow.b, 0)
+  remainder_cashflow <- ifelse(not_whole_year, (phasely$time-floor(phasely$time))*(phasely$cashflow/phasely$time), 0)
+  base_cost          <- ifelse(within_phase, phasely$cost.a * x + phasely$cost.b, 0)
+  remainder_cost     <- ifelse(not_whole_year, (phasely$time-floor(phasely$time))*(phasely$cost/phasely$time), 0)
+  base_revenue       <- ifelse(within_phase, phasely$revenue.a * x + phasely$revenue.b, 0)
+  remainder_revenue  <- ifelse(not_whole_year, (phasely$time-floor(phasely$time))*(phasely$revenue/phasely$time), 0)
+  base_prob          <- ifelse(within_phase, phasely$prob.a * x + phasely$prob.b, 0)
+  remainder_prob     <- ifelse(not_whole_year, phasely$prob / ((phasely$prob.a*x+phasely$prob.b) ^ floor(phasely$time)), 0)
   # NOTE: The remainder is computed by assuming that the value is evenly
   # distributed over the whole phase (i.e. constantly). If this is not true
   # then the remainder will be incorrectly computed. However, since we assume
@@ -134,9 +132,9 @@ for (x in 1:ceiling(max(obs$time) + 1)) {
   revenue   <- base_revenue + remainder_revenue
   prob      <- base_prob + remainder_prob
   # Make data frame
-  subject    <- obs$subject
+  subject    <- phasely$subject
   phase.year <- x
-  phase      <- obs$phase
+  phase      <- phasely$phase
   year       <- floor(t)
   df        <- data.frame(subject, phase.year, t, year, phase, cashflow, cost, revenue, prob, discount.rate)
   df        <- df[cashflow != 0 | prob > 0, ] # No need to keep years without cashflow
