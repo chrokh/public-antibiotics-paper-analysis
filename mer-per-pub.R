@@ -81,6 +81,7 @@ boxplot(obs$prob~obs$phase, ylab='Probability', main='Technical probability of s
 boxplot(obs$time~obs$phase, ylab='Months', main='Duration by phase', las=1)
 
 
+
 # Compute: Time to phase
 obs <- obs %>% group_by(subject) %>%
   mutate(time.to = cumsum(time) - time,
@@ -108,6 +109,7 @@ for (x in 1:ceiling(max(obs$time) + 1)) {
   t              <- x + obs$time.to
   within_phase   <- x <= obs$time
   not_whole_year <- x-obs$time>0 & x-obs$time<1
+  discount.rate  <- obs$discount.rate
   # Compute: yearly
   base_cashflow      <- ifelse(within_phase, obs$cashflow.a * x + obs$cashflow.b, 0)
   remainder_cashflow <- ifelse(not_whole_year, (obs$time-floor(obs$time))*(obs$cashflow/obs$time), 0)
@@ -136,19 +138,31 @@ for (x in 1:ceiling(max(obs$time) + 1)) {
   phase.year <- x
   phase      <- obs$phase
   year       <- floor(t)
-  df        <- data.frame(subject, phase.year, t, year, phase, cashflow, cost, revenue, prob)
+  df        <- data.frame(subject, phase.year, t, year, phase, cashflow, cost, revenue, prob, discount.rate)
   df        <- df[cashflow != 0 | prob > 0, ] # No need to keep years without cashflow
   cashflows <- rbind(cashflows, df)
 }
 
+# Compute: Present Value (PV)
+cashflows$pv0 <- cashflows$cashflow / ((1 + cashflows$discount.rate) ^ cashflows$t)
+
+# Sort: By subject then time
+cashflows <- arrange(cashflows, subject, t)
 
 # Compute: Cumulative properties
-cashflows <- cashflows %>% arrange(subject, t) %>% group_by(subject) %>%
-  mutate(cum.cashflow = cumsum(cashflow),
-         cum.revenue  = cumsum(revenue),
-         cum.cost     = cumsum(cost),
-         cum.prob     = cumprod(prob),
-         rem.prob     = prod(prob) / cumprod(prob)) # TODO: I'm NOT sure this is correct!)
+cashflows <- cashflows %>% group_by(subject) %>%
+  mutate(discount.rate = unique(discount.rate),
+         cum.cashflow  = cumsum(cashflow),
+         cum.revenue   = cumsum(revenue),
+         cum.cost      = cumsum(cost),
+         cum.prob      = cumprod(prob),
+         rem.prob      = prod(prob) / cumprod(prob) # TODO: I'm NOT sure this is correct!)
+         )
+
+# Transform: Into enpvs
+enpvs <- cashflows %>% group_by(subject) %>%
+  summarise(enpv0 = sum(pv0))
+
 
 # Transform: To yearly
 yearly <- cashflows %>% group_by(subject, year) %>%
@@ -156,6 +170,7 @@ yearly <- cashflows %>% group_by(subject, year) %>%
             cost         = sum(cost),
             revenue      = sum(revenue),
             prob         = prod(prob),
+            pv0           = sum(pv0),
             cum.cashflow = tail(cum.cashflow, n=1),
             cum.revenue  = tail(cum.revenue, n=1),
             cum.cost     = tail(cum.cost, n=1),
@@ -167,6 +182,7 @@ boxplot(yearly$cost ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, mai
 boxplot(yearly$revenue ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Revenue per year')
 boxplot(yearly$cashflow ~ yearly$year, xlab='Year', ylab='USD (million)', las=2, main='Cashflow per year')
 boxplot(yearly$prob ~ yearly$year, xlab='Year', ylab='Probability of success', las=2, main='Technical probability of success, per year')
+boxplot(yearly$pv0 ~ yearly$year, xlab='Year', ylab='Present Value (PV) from 0', las=2, main='Present Value (PV) of different years from year 0')
 
 # Plot: Cumulative yearly data
 boxplot(yearly$cum.cost ~ yearly$year, las=2, xlab='Year', ylab='USD (million)', main='Cumulative cost per year')
@@ -175,3 +191,5 @@ boxplot(yearly$cum.cashflow ~ yearly$year, las=2, xlab='Year', ylab='USD (millio
 boxplot(yearly$cum.prob ~ yearly$year, las=2, xlab='Year', ylab='Probability', main='Probability of reaching year')
 boxplot(yearly$rem.prob ~ yearly$year, las=2, xlab='Year', ylab='Probability', main='Remaining probability of success per year')
 
+# Plot: ENPV
+boxplot(enpvs$enpv0, las=2, xlab='Year', ylab='ENPV', main='ENPV from different years')
