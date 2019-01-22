@@ -1,4 +1,3 @@
-library(plyr)
 library(dplyr)
 
 # Configure
@@ -142,11 +141,11 @@ for (x in 1:ceiling(max(obs$time) + 1)) {
 
 # Transform: To yearly
 cashflows$year <- floor(cashflows$t)
-yearly <- ddply(cashflows, .(subject, year), summarise,
-                cashflow = sum(cashflow),
-                cost     = sum(cost),
-                revenue  = sum(revenue),
-                prob     = prod(prob))
+yearly <- cashflows %>% group_by(subject, year) %>%
+  summarise(cashflow = sum(cashflow),
+            cost     = sum(cost),
+            revenue  = sum(revenue),
+            prob     = prod(prob))
 
 
 # Plot: Yearly data
