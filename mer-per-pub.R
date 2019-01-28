@@ -87,6 +87,14 @@ phases <- phases %>% mutate(t = cumsum(time) - time)
 # Compute: precompute cashflow since it's used alot
 phases$cashflow <- phases$revenue - phases$cost
 
+# Compute: cumulative phase properties
+phases <- phases %>% group_by(subject) %>%
+  mutate(cum_cost = cumsum(cost),
+         cum_revenue = cumsum(revenue),
+         cum_time    = cumsum(time),
+         cum_prob    = cumprod(prob))
+
+
 # Compute: Cost/revenue slopes and offsets to allow computing discrete
 # cashflows for years TODO: Separate market into separate dataset and then do
 # the yearly2 calc for two datasets so that we don't have to deal with
@@ -156,12 +164,18 @@ ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.m
   xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
   ggtitle('Mean property distribution across phases (grouped by property)')
 
-# Plot: by phase
-boxplot(data=phases, cumsum(cost) ~ phase, ylab='USD (million)', main='Cumulative cost by phase', las=1)
-boxplot(data=phases, cumsum(revenue) ~ phase, ylab='USD (million)', main='Cumulative revenue by phase', las=1)
-boxplot(data=phases, cumsum(cashflow) ~ phase, ylab='USD (million)', main='Cumulative cashflow by phase', las=1)
-boxplot(data=phases, cumprod(prob)*100 ~ phase, ylab='Probability (%)', main='Cumulative technical probability of success by phase', las=1)
-boxplot(data=phases, cumsum(time) ~ phase, ylab='Months', main='Cumulative duration by phase', las=1)
+# Plot: cumulative properties per phase
+ggplot(filter(phases, cost>0), aes(phase, cum_cost, fill=phase)) +
+    geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+    ggtitle('Cumulative cost by phase') +
+    xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
+ggplot(filter(phases, prob<1), aes(phase, cum_prob*100, fill=phase)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Cumulative technical probability of success by phase') +
+  xlab('Phase') + ylab('%') + labs(fill='Phase')
+ggplot(phases, aes(phase, cum_time, fill=phase)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Cumulative duration by phase')
 
 
 # Transform: Cartesian product of phases (phase from phase)
