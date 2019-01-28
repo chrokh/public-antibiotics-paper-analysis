@@ -193,14 +193,38 @@ for (from in PHASES) {
   phases_from_phases <- bind_rows(phases_from_phases, pfp)
 }
 
-# Plot: PVs of different phases from different phases
-for (ph in PHASES) {
-  sub <- filter(phases_from_phases, from == ph)
-  boxplot(sub$cost.pv ~ sub$phase, las=1, ylab='USD (million)', main=sprintf('Present Value (PV) of cost from %s', ph))
-  boxplot(sub$revenue.pv ~ sub$phase, las=1, ylab='USD (million)', main=sprintf('Present Value (PV) of revenue from %s', ph))
-  boxplot((sub$revenue.pv - sub$cost.pv) ~ sub$phase, las=1, ylab='USD (million)', main=sprintf('Present Value (PV) of cashflow from %s', ph))
-  boxplot(sub$time.to ~ sub$phase, las=1, ylab='Years', main=sprintf('Time to phase from %s', ph))
-}
+
+# Plot: PV of different properties from different phases (violin matrices)
+ggplot(filter(phases_from_phases, cost.pv>0), aes(phase, cost.pv, fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Cost PV (present value) from the perspective of different phases') +
+  facet_grid(rows=vars(from), cols=vars(phase), scales='free')
+ggplot(filter(phases_from_phases, revenue.pv>0), aes(phase, revenue.pv, fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Revenue PV (present value) from the perspective of different phases')
+  #facet_grid(rows=vars(from), cols=vars(phase), scales='free')
+ggplot(filter(phases_from_phases, (revenue.pv-cost.pv)!=0), aes(phase, (revenue.pv-cost.pv), fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(rows=vars(from), cols=vars(phase), scales='free')
+
+# Plot: PV of different properties from different phases (density plots)
+# TODO: Why is P4 from P4 not a single line since it's a constant value?
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(cost.pv, fill=from)) +
+  geom_density(alpha=0.3) +
+  ggtitle('Cost PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+phases_from_phases %>% filter(revenue.pv > 0) %>%
+  ggplot(aes(revenue.pv, fill=from)) +
+  geom_density(alpha=0.3) +
+  ggtitle('Revenue PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+
 
 # Transform: PV means per view
 phases_from_phases_summary <- phases_from_phases %>% group_by(phase, from) %>%
