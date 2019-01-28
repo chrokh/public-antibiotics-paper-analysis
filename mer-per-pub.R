@@ -3,6 +3,7 @@ library(dplyr)
 library(forcats)
 library(ggplot2)
 library(ggridges)
+library(tidyr)
 
 # Visual config
 options(tibble.width = Inf) # Always print all tibble cols
@@ -98,24 +99,62 @@ phases$revenue.b  <- ifelse(phases$phase=='MP', 0, (phases$revenue / phases$time
 phases$prob.a     <- 0
 phases$prob.b     <- phases$prob ^ (1/phases$time)
 
-# Plot: by phase
-boxplot(data=phases, cost ~ phase, ylab='USD (million)', main='Cost by phase', las=1)
+# Plot: phase property distributions
 ggplot(filter(phases, cost>0), aes(phase, cost, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.5) +
-  ggtitle('Cost by phase')
-boxplot(data=phases, revenue ~ phase, ylab='USD (million)', main='Revenue by phase', las=1)
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Cost by phase') +
+  xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
 ggplot(filter(phases, revenue>0), aes(phase, revenue, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.5) +
-  ggtitle('Revenue by phase')
-boxplot(data=phases, cashflow ~ phase, ylab='USD (million)', main='Cashflow by phase', las=1)
-boxplot(data=phases, prob*100 ~ phase, ylab='Probability (%)', main='Technical probability of success by phase', las=1)
-ggplot(filter(phases, prob<1), aes(phase, prob, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.5) +
-  ggtitle('Technical probability of success by phase')
-boxplot(data=phases, time ~ phase, ylab='Months', main='Duration by phase', las=1)
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Revenue by phase') +
+  xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
+ggplot(filter(phases, prob<1), aes(phase, prob*100, fill=phase)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Technical probability of success by phase') +
+  xlab('Phase') + ylab('%') + labs(fill='Phase')
 ggplot(phases, aes(phase, time, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.5) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
   ggtitle('Duration by phase')
+
+# Transform: phase properties to long from wide
+phase_props <- phases %>%
+  filter(phase != 'MP') %>%
+  select(1:6) %>%
+  gather(key='prop', value='value', 3:6) %>%
+  group_by(subject, prop) %>%
+  mutate(total = sum(value),
+         ratio = value / total) # NOTE: will cause NaN if 0/0
+
+# Plot: property distribution across phases
+ggplot(filter(phase_props, !is.na(ratio)), aes(ratio*100, fill=phase)) +
+  geom_density(alpha=0.75) +
+  ggtitle('Property distribution across phases (grouped by property)') +
+  facet_grid(prop ~ .) +
+  xlab('Percentage of property in phase') + ylab('Density')
+ggplot(phase_props, aes(ratio*100, fill=prop)) +
+  geom_density(alpha=0.75) +
+  ggtitle('Property distribution across phases (grouped by phase)') +
+  facet_grid(phase ~ .) +
+  xlab('Percentage of property in phase') + ylab('Density')
+ggplot(phase_props, aes(x=prop,y=ratio*100, fill=prop)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
+  ggtitle('Property distribution across phases') +
+  facet_grid(~ phase) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.ticks.x=element_blank()) +
+  ylab('Percentage of property in phase') + xlab('Density')
+
+# Summarize: property distribution across phases
+phase_props_summary <- phase_props %>%
+  group_by(phase, prop) %>%
+  summarise(ratio.mean = mean(ratio))
+
+# Plot: summary of property distribution across phases
+ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+  geom_bar(stat='identity', aes(fill=phase), position='dodge') +
+  labs(fill='Phase') +
+  xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
+  ggtitle('Mean property distribution across phases (grouped by property)')
 
 # Plot: by phase
 boxplot(data=phases, cumsum(cost) ~ phase, ylab='USD (million)', main='Cumulative cost by phase', las=1)
