@@ -230,39 +230,27 @@ phases_from_phases %>% filter(revenue.pv > 0) %>%
 phases_from_phases_summary <- phases_from_phases %>% group_by(phase, from) %>%
   summarise(revenue.pv.mean  = mean(revenue.pv),
             cost.pv.mean     = mean(cost.pv),
-            cashflow.pv.mean = mean(revenue.pv - cost.pv),
             time.to.mean     = mean(time.to))
 
-# Plot: PVs from different views in matrix
-ggplot(phases_from_phases_summary, aes(phases_from_phases_summary$phase, phases_from_phases_summary$from, z=phases_from_phases_summary$cost.pv.mean)) +
-  geom_tile(aes(fill = phases_from_phases_summary$cost.pv.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='red', name='PV') +
-  xlab('Phase') + ylab('From') +
-  ggtitle('Mean Present Value (PV) of phase cost from different phases') +
-  coord_fixed()
-ggplot(phases_from_phases_summary, aes(phases_from_phases_summary$phase, phases_from_phases_summary$from, z=phases_from_phases_summary$revenue.pv.mean)) +
-  geom_tile(aes(fill = phases_from_phases_summary$revenue.pv.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='darkgreen', name='PV') +
-  xlab('Phase') + ylab('From') +
-  ggtitle('Mean Present Value (PV) of phase revenue from different phases') +
-  coord_fixed()
-ggplot(phases_from_phases_summary, aes(phases_from_phases_summary$phase, phases_from_phases_summary$from, z=phases_from_phases_summary$cashflow.pv.mean)) +
-  geom_tile(aes(fill = phases_from_phases_summary$cashflow.pv.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='darkgreen', name='PV') +
-  xlab('Phase') + ylab('From') +
-  ggtitle('Mean Present Value (PV) of phase cashflow from different phases') +
-  coord_fixed()
-ggplot(phases_from_phases_summary, aes(phases_from_phases_summary$phase, phases_from_phases_summary$from, z=phases_from_phases_summary$time.to.mean)) +
-  geom_tile(aes(fill = phases_from_phases_summary$time.to.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='darkgreen', name='Yrs') +
-  xlab('To') + ylab('From') +
-  ggtitle('Mean time to phase from different phases') +
-  coord_fixed()
+# Plot: mean PVs of props for phases from phases
+phases_from_phases_summary %>%
+  filter(cost.pv.mean > 0) %>%
+  ggplot(aes(phase, cost.pv.mean)) +
+  geom_bar(stat='identity', aes(fill=from), position='dodge') + ylab('PV (cost)') +
+  ggtitle('Mean cost PV of phase from the perspective of different phases')
 
+phases_from_phases_summary %>%
+  ggplot(aes(phase, (revenue.pv.mean - cost.pv.mean))) +
+  geom_bar(stat='identity', aes(fill=from), position='dodge') + ylab('PV (cashflow)') +
+  ggtitle('Mean cashflow PV of phase from the perspective of different phases')
+
+# TODO: This plot feels out of place, and if this is plotted I guess remaining
+# probability should be plotted as well.
+phases_from_phases_summary %>%
+  filter(time.to.mean > 0) %>%
+  ggplot(aes(phase, time.to.mean)) +
+  geom_bar(stat='identity', aes(fill=from), position='dodge') + ylab('Time to') +
+  ggtitle('Mean time remaining to different phases from different phases')
 
 
 # Transform: To cashflows over time (phase yearly)
