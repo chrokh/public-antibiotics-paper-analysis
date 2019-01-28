@@ -107,22 +107,44 @@ phases$revenue.b  <- ifelse(phases$phase=='MP', 0, (phases$revenue / phases$time
 phases$prob.a     <- 0
 phases$prob.b     <- phases$prob ^ (1/phases$time)
 
+
 # Plot: phase property distributions
-ggplot(filter(phases, cost>0), aes(phase, cost, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Cost by phase') +
-  xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
-ggplot(filter(phases, revenue>0), aes(phase, revenue, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Revenue by phase') +
-  xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
-ggplot(filter(phases, prob<1), aes(phase, prob*100, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Technical probability of success by phase') +
-  xlab('Phase') + ylab('%') + labs(fill='Phase')
-ggplot(phases, aes(phase, time, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Duration by phase')
+ggplot(phases, aes(cost, fill=phase)) +
+  geom_histogram() +
+  facet_grid(phase ~ ., scale='free_y') +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_blank()) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
+  ggtitle('Cost by phase') + xlab('USD (million)') + ylab('Frequency')
+ggplot(phases, aes(revenue, fill=phase)) +
+  geom_histogram() +
+  facet_grid(phase ~ ., scale='free_y') +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_blank()) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
+  ggtitle('Revenue by phase') + xlab('USD (million)') + ylab('Frequency')
+ggplot(phases, aes(prob*100, fill=phase)) +
+  geom_histogram() +
+  facet_grid(phase ~ ., scale='free_y') +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_blank()) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
+  ggtitle('Probability by phase') + xlab('Probability') + ylab('Frequency')
+ggplot(phases, aes(time, fill=phase)) +
+  geom_histogram() +
+  facet_grid(phase ~ ., scale='free_y') +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_blank()) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
+  ggtitle('Time by phase') + xlab('Years') + ylab('Frequency')
 
 # Transform: phase properties to long from wide
 phase_props <- phases %>%
@@ -210,6 +232,8 @@ ggplot(filter(phases_from_phases, (revenue.pv-cost.pv)!=0), aes(phase, (revenue.
 
 # Plot: PV of different properties from different phases (density plots)
 # TODO: Why is P4 from P4 not a single line since it's a constant value?
+# SOLUTION: Increase bandwidth (bw). Not sure if it's an appropriate solution
+# though. Or switch to histograms.
 phases_from_phases %>% filter(cost.pv > 0) %>%
   ggplot(aes(cost.pv, fill=from)) +
   geom_density(alpha=0.3) +
