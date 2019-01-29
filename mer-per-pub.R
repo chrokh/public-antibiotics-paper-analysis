@@ -332,15 +332,40 @@ for (x in 1:ceiling(max(phases$time) + 1)) {
 }
 
 # Plot: Property per phase year of different phases
-for (ph in PHASES) {
-  sub <- subset(phase_years, phase_years$phase == ph)
-  boxplot(sub$cost ~ sub$phase.year, main=paste('Cost per year in', ph))
-  mtext('Note: phase duration vary across projects.')
-  boxplot(sub$revenue ~ sub$phase.year, main=paste('Revenue per year in', ph))
-  mtext('Note: phase duration vary across projects.')
-  boxplot(sub$prob * 100 ~ sub$phase.year, main=paste('Probability of success per year in', ph))
-  mtext('Note: phase duration vary across projects.')
-}
+
+
+# Plot: cumulative properties per phase (violin plot)
+ggplot(filter(phase_years, cost > 0), aes(as.factor(phase.year), cost)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
+  theme(panel.grid.major.x=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank()) +
+  ylab('USD (million)') +
+  xlab('Year in phase (note: phase duration vary across projects and phases)') +
+  ggtitle('Cost per year in phase')
+ggplot(filter(phase_years, prob < 1), aes(as.factor(phase.year), prob*100)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
+  theme(panel.grid.major.x=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank()) +
+  ylab('USD (million)') +
+  xlab('Year in phase (note: phase duration vary across projects and phases)') +
+  ggtitle('Probability of success per year in phase')
+ggplot(filter(phase_years, revenue > 0), aes(as.factor(phase.year), revenue)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
+  theme(panel.grid.major.x=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank()) +
+  ylab('USD (million)') +
+  xlab('Year in phase (note: phase duration vary across projects and phases)') +
+  ggtitle('Revenue per year in phase')
+
 
 # Summarize: phase_years
 phase_years_summary <- phase_years %>% group_by(subject, phase) %>%
