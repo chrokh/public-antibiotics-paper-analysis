@@ -367,44 +367,6 @@ ggplot(filter(phase_years, revenue > 0), aes(as.factor(phase.year), revenue)) +
   ggtitle('Revenue per year in phase')
 
 
-# Summarize: phase_years
-phase_years_summary <- phase_years %>% group_by(subject, phase) %>%
-  arrange(phase.year) %>%
-  mutate(cum.phase.cost     = cumsum(cost),
-         cum.phase.revenue  = cumsum(revenue),
-         cum.phase.cashflow = cumsum(revenue - cost),
-         ) %>%
-  group_by(phase, phase.year) %>%
-  summarise(revenue.mean  = mean(revenue),
-            cost.mean     = mean(cost),
-            cashflow.mean = mean(revenue - cost),
-            cum.phase.revenue.mean  = mean(cum.phase.revenue),
-            cum.phase.cost.mean     = mean(cum.phase.cost),
-            cum.phase.cashflow.mean = mean(cum.phase.revenue - cum.phase.cost),
-            )
-
-# Plot: PVs from different views in matrix
-sub <- phase_years_summary
-ggplot(sub, aes(x=sub$phase, y=sub$phase.year, z=sub$cost.mean)) +
-  geom_tile(aes(fill =sub$cost.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='red', name='USD\n(million)') +
-  xlab('Phase') + ylab('Year') +
-  ggtitle('Mean cost per phase year')
-ggplot(sub, aes(x=sub$phase, y=sub$phase.year, z=sub$revenue.mean)) +
-  geom_tile(aes(fill =sub$revenue.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='darkgreen', name='USD\n(million)') +
-  xlab('Phase') + ylab('Year') +
-  ggtitle('Mean revenue per phase year')
-ggplot(sub, aes(x=sub$phase, y=sub$phase.year, z=sub$cum.phase.cost.mean)) +
-  geom_tile(aes(fill =sub$cum.phase.cost.mean)) +
-  theme_minimal() +
-  scale_fill_gradient(low='lightgrey', high='red', name='USD\n(million)') +
-  xlab('Phase') + ylab('Year') +
-  ggtitle('Mean cumulative cost per phase year')
-
-
 # Transform: Phase years from different phases
 phase_years_from_phases <- tibble()
 for (from in PHASES) {
