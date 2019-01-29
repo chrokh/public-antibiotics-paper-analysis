@@ -155,6 +155,12 @@ phase_props <- phases %>%
   mutate(total = sum(value),
          ratio = value / total) # NOTE: will cause NaN if 0/0
 
+# Transform: cumulative phase properties to long from wide
+cum_phase_props <- phases %>%
+  filter(phase != 'MP') %>%
+  select(c(1, 2, cum_cost:cum_prob)) %>%
+  gather(key='prop', value='value', cum_cost:cum_prob)
+
 # Plot: property distribution across phases
 ggplot(filter(phase_props, !is.na(ratio)), aes(ratio*100, fill=phase)) +
   geom_density(alpha=0.75) +
@@ -186,18 +192,27 @@ ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.m
   xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
   ggtitle('Mean property distribution across phases (grouped by property)')
 
-# Plot: cumulative properties per phase
-ggplot(filter(phases, cost>0), aes(phase, cum_cost, fill=phase)) +
-    geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-    ggtitle('Cumulative cost by phase') +
-    xlab('Phase') + ylab('USD (million)') + labs(fill='Phase')
-ggplot(filter(phases, prob<1), aes(phase, cum_prob*100, fill=phase)) +
+# Plot: cumulative properties per phase (density plot)
+ggplot(filter(cum_phase_props, prop!='cum_revenue'),
+       aes(value, fill=phase)) +
+  facet_wrap(prop ~ ., scale='free', ncol=1) +
+  geom_density(alpha=0.75) +
+  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_blank()) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  ggtitle('Cumulative properties by end of phase') +
+  ylab('Frequency') + xlab(element_blank()) + labs(fill='Phase')
+
+# Plot: cumulative properties per phase (violin plot)
+ggplot(filter(cum_phase_props, prop!='cum_revenue'),
+       aes(phase, value, fill=phase)) +
   geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Cumulative technical probability of success by phase') +
-  xlab('Phase') + ylab('%') + labs(fill='Phase')
-ggplot(phases, aes(phase, cum_time, fill=phase)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Cumulative duration by phase')
+  facet_wrap(prop ~ ., scale='free', ncol=1) +
+  ggtitle('Cumulative properties by end of phase') +
+  xlab('Phase') + ylab(element_blank()) + labs(fill='Phase')
+
 
 
 # Transform: Cartesian product of phases (phase from phase)
