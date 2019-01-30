@@ -436,14 +436,16 @@ ggplot(final_year_from_phases, aes(from, cashflow.npv, fill=from)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 20)) +
   ggtitle('Final year NPV starting from different phases')
 
-# Plot: Final year NPV starting from different phases (histogram)
-summary <- final_year_from_phases %>%
+# Summarize: Final year from phases
+final_year_from_phases_summary <- final_year_from_phases %>%
   group_by(from) %>%
-  summarize(median = median(cashflow.npv))
+  summarize(cashflow.npv.median = median(cashflow.npv))
+
+# Plot: Final year NPV starting from different phases (histogram)
 ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
   geom_histogram(aes(y=..density..)) +
   geom_density(col='black', fill='transparent') +
-  geom_vline(data=summary, aes(xintercept=median), colour='red') +
+  geom_vline(data=final_year_from_phases_summary, aes(xintercept=cashflow.npv.median), colour='red') +
   theme(axis.text.y=element_blank(),
         axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
