@@ -193,6 +193,13 @@ ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.m
   xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
   ggtitle('Mean property distribution across phases (grouped by property)')
 
+# Plot: summary of property distribution across phases
+ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+  geom_bar(stat='identity', aes(fill=phase), position='stack') +
+  labs(fill='Phase') +
+  xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
+  ggtitle('Mean property distribution across phases (grouped by property)')
+
 # Plot: cumulative properties per phase (density plot)
 ggplot(filter(cum_phase_props, prop!='cum_revenue'),
        aes(value, fill=phase)) +
