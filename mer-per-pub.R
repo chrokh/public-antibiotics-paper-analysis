@@ -4,13 +4,14 @@ library(forcats)
 library(ggplot2)
 library(ggridges)
 library(tidyr)
+library(gridExtra)
 
 # Visual config
 options(tibble.width = Inf) # Always print all tibble cols
 
 # Data config
 set.seed(1)
-N     = 50
+N     = 100
 YEARS = 25
 
 
@@ -373,37 +374,48 @@ for (from in PHASES) {
   pyfp <- phase_years %>% filter(phase >= from) %>%
     group_by(subject) %>%
     arrange(subject, t) %>%
-    mutate(from        = factor(from, levels=PHASES, ordered=TRUE),
-           time.to     = t - min(t),
-           cum.cost    = cumsum(cost),
-           cum.revenue = cumsum(revenue),
-           cost.pv     = cost / ((1 + discount.rate) ^ time.to),
-           revenue.pv  = revenue / ((1 + discount.rate) ^ time.to),
-           cost.npv    = cumsum(cost.pv),
-           revenue.npv = cumsum(revenue.pv),
-           year        = floor(time.to)
+    mutate(from         = factor(from, levels=PHASES, ordered=TRUE),
+           time.to      = t - min(t),
+           cashflow     = revenue - cost,
+           cum.cost     = cumsum(cost),
+           cum.revenue  = cumsum(revenue),
+           cum.cashflow = cum.revenue - cum.cost,
+           cost.pv      = cost / ((1 + discount.rate) ^ time.to),
+           revenue.pv   = revenue / ((1 + discount.rate) ^ time.to),
+           cashflow.pv  = revenue.pv - cost.pv,
+           cost.npv     = cumsum(cost.pv),
+           revenue.npv  = cumsum(revenue.pv),
+           cashflow.npv = (revenue.npv - cost.npv),
+           year         = floor(time.to)
            )
   phase_years_from_phases <- bind_rows(phase_years_from_phases, pyfp)
 }
 
 
-# Plot: Yearly data from different phases)
+# Plot: Yearly data from different phases
 for (ph in PHASES) {
   sub <- filter(phase_years_from_phases, from == ph)
-  # Cost
-  boxplot(data=sub, cost ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Cost per year from %s', ph))
-  boxplot(data=sub, -cost.pv ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Cost PV of future years from %s', ph))
-  boxplot(data=sub, -cost.npv ~ year, xlab='Exit Year', ylab='USD (million)', las=1, main=sprintf('Cost NPV (cumulative PV) per year from %s', ph))
-  # Revenue
-  boxplot(data=sub, revenue ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Revenue per year from %s', ph))
-  boxplot(data=sub, revenue.pv ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Revenue PV of future years from %s', ph))
-  boxplot(data=sub, revenue.npv ~ year, xlab='Exit Year', ylab='USD (million)', las=1, main=sprintf('Revenue NPV (cumulative PV) per year from %s', ph))
-  # Cashflow
-  boxplot(data=sub, (revenue - cost) ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Cashflow per year from %s', ph))
-  boxplot(data=sub, (revenue.pv - cost.pv) ~ year, xlab='Year', ylab='USD (million)', las=1, main=sprintf('Cashflow PV of future years from %s', ph))
-  boxplot(data=sub, (revenue.npv - cost.npv) ~ year, xlab='Exit Year', ylab='USD (million)', las=1, main=sprintf('Cashflow NPV (cumulative PV) per year from %s', ph))
-  # Prob
-  boxplot(data=sub, prob*100 ~ year, xlab='Year', ylab='Probability (%)', las=1, main=sprintf('Technical probability of success, per year from %s', ph))
+  p1 <- ggplot(sub, aes(as.factor(year), cashflow)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    ggtitle('Not capitalized') + ylab('USD (million)') + xlab('Year') +
+    xlab(element_blank()) + ylab(element_blank()) +
+    geom_boxplot()
+  p2 <- ggplot(sub, aes(as.factor(year), cashflow.pv)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    ggtitle('PV') + ylab('USD (million)') + xlab('Year') +
+    xlab(element_blank()) + ylab(element_blank()) +
+    geom_boxplot()
+  p3 <- ggplot(sub, aes(as.factor(year), cum.cashflow)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    ggtitle('Cumulative') + ylab('USD (million)') + xlab('Year') +
+    xlab(element_blank()) + ylab(element_blank()) +
+    geom_boxplot()
+  p4 <- ggplot(sub, aes(as.factor(year), cashflow.npv)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    ggtitle('NPV') + ylab('USD (million)') + xlab('Year') +
+    xlab(element_blank()) + ylab(element_blank()) +
+    geom_boxplot()
+  grid.arrange(p1, p2, p3, p4, nrow=2, top=sprintf('Cashflow per year from %s', ph))
 }
 
 
