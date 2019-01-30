@@ -418,49 +418,47 @@ for (ph in PHASES) {
   grid.arrange(p1, p2, p3, p4, nrow=2, top=sprintf('Cashflow per year from %s', ph))
 }
 
-
-for (ph in PHASES) {
-  sub <- phase_years_from_phases %>%
-    group_by(subject) %>%
-    filter(from == ph) %>%
-    filter(year == max(year)) %>%
-    summarise(cost.npv = tail(cost.npv, n=1),
-              revenue.npv = tail(revenue.npv, n=1),
-              cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1)
-              )
-
-  print(ggplot(sub, aes(from, cashflow.npv)) +
-    geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.5) +
-    ggtitle('Final year NPV from PC'))
-
-  print(ggplot(sub, aes(cashflow.npv)) + geom_histogram(aes(y=..density..)) + geom_density(col=2))
-}
-
-sub <- phase_years_from_phases %>%
+# Transform: Compute final year npv values
+# TODO: Not sure if final year is NPV is becoming skewed by zero cashflow years
+# in the end. It seems to me that it shouldn't be a problem but: make some
+# calculations to ensure that this is definitely not a problem!
+final_year_from_phases <- phase_years_from_phases %>%
   group_by(subject, from) %>%
   filter(year == max(year)) %>%
-  summarise(cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1),
-            cum.cashflow = tail(cum.revenue, n=1) - tail(cum.cost, n=1),
+  summarise(cost.npv = tail(cost.npv, n=1),
+            revenue.npv = tail(revenue.npv, n=1),
+            cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1)
             )
+# Plot: Final year NPV starting from different phases (violin plot)
+ggplot(final_year_from_phases, aes(from, cashflow.npv, fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
+  theme(legend.position='none') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 20)) +
+  ggtitle('Final year NPV starting from different phases')
 
-ggplot(sub, aes(cum.cashflow, from)) +
-  geom_density_ridges(quantile_lines = TRUE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('Cumulative cashflow density from different starting phases') +
-  xlab('Cumulative cashflow (million USD)') + ylab('Starting Phase')
-
-ggplot(sub, aes(cashflow.npv, from)) +
-  geom_density_ridges(quantile_lines = TRUE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('NPV density from different starting phases') +
-  xlab('NPV') + ylab('Starting Phase')
+# Plot: Final year NPV starting from different phases (histogram)
+summary <- final_year_from_phases %>%
+  group_by(from) %>%
+  summarize(median = median(cashflow.npv))
+ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
+  geom_histogram(aes(y=..density..)) +
+  geom_density(col='black', fill='transparent') +
+  geom_vline(data=summary, aes(xintercept=median), colour='red') +
+  theme(axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  facet_grid(from~., scale='free_y') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
+  ggtitle('Final year NPV starting from different phases')
 
 sub <- phase_years_from_phases %>%
   filter(from == 'PC') %>%
   group_by(subject, year) %>%
   summarise(cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1))
 
-  ggplot(sub, aes(cashflow.npv, as.factor(year))) +
+ggplot(sub, aes(cashflow.npv, as.factor(year))) +
   geom_density_ridges(quantile_lines = TRUE) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   ggtitle('NPV density at different exit years, starting from PC') +
@@ -471,7 +469,7 @@ sub <- phase_years_from_phases %>%
   group_by(subject, phase) %>%
   summarise(cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1))
 
-  ggplot(sub, aes(cashflow.npv, phase)) +
+ggplot(sub, aes(cashflow.npv, phase)) +
   geom_density_ridges(quantile_lines = TRUE) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   ggtitle('NPV density when exiting at the end(?) of different phases, starting from PC') +
