@@ -625,14 +625,12 @@ p1 <- ggplot(filter(final_year_from_phases_summary_long,
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
   ggtitle('Project value, starting from various phases')
 
-# Plot: mean rnpv/npv over time (from years)
-p2 <- ggplot(filter(final_year_from_years_summary_long,
-                    valuation=='npv.mean' | valuation=='rnpv.mean'),
-             aes(from, value, color=valuation)) +
+# Plot: final value starting from different phases
+p2 <- ggplot(final_year_from_phases_summary_long,
+             aes(from, value, color=valuation, group=valuation)) +
   geom_line() + geom_point() +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('Project value, starting from various years')
+  ggtitle('Project value, starting from various phases')
 
 grid.arrange(p1, p2, ncol=1)
 
@@ -642,12 +640,14 @@ grid.arrange(p1, p2, ncol=1)
 
 
 
-# Plot: final value starting from different phases
-p1 <- ggplot(final_year_from_phases_summary_long,
-             aes(from, value, color=valuation, group=valuation)) +
+# Plot: mean rnpv/npv over time (from years)
+p1 <- ggplot(filter(final_year_from_years_summary_long,
+                    valuation=='npv.mean' | valuation=='rnpv.mean'),
+             aes(from, value, color=valuation)) +
   geom_line() + geom_point() +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('Project value, starting from various phases')
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  ggtitle('Project value, starting from various years')
 
 # Plot: final value starting from different years
 p2 <- ggplot(final_year_from_years_summary_long,
