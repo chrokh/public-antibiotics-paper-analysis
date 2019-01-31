@@ -339,40 +339,41 @@ for (x in 1:ceiling(max(phases$time) + 1)) {
   phase_years    <- bind_rows(phase_years, df)
 }
 
-# Plot: Property per phase year of different phases
+# Plot: Properties per phase year of different phases
+ggplot(phase_years, aes(as.factor(phase.year), cost, fill=phase)) +
+  geom_boxplot(alpha=0.6) +
+  facet_wrap(.~phase, scale='free', nrow=2) +
+  xlab('Phase year (note: phase duration vary across projects and phases)') +
+  theme(legend.position='none') +
+  ggtitle('Cost of year in phase')
+ggplot(phase_years, aes(as.factor(phase.year), revenue, fill=phase)) +
+  geom_boxplot(alpha=0.6) +
+  facet_wrap(.~phase, scale='free', nrow=2) +
+  xlab('Phase year (note: phase duration vary across projects and phases)') +
+  theme(legend.position='none') +
+  ggtitle('Revenue of year in phase')
+ggplot(phase_years, aes(as.factor(phase.year), prob, fill=phase)) +
+  geom_boxplot(alpha=0.6) +
+  facet_wrap(.~phase, scale='free', nrow=2) +
+  xlab('Phase year (note: phase duration vary across projects and phases)') +
+  theme(legend.position='none') +
+  ggtitle('Probability of success of year in phase')
 
+# Summarize: phase years
+phase_years_summary <- phase_years %>%
+  group_by(phase, phase.year) %>%
+  summarize(cost.mean    = mean(cost),
+            prob.mean    = mean(prob),
+            revenue.mean = mean(revenue))
 
-# Plot: cumulative properties per phase (violin plot)
-ggplot(filter(phase_years, cost > 0), aes(as.factor(phase.year), cost)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
-  theme(panel.grid.major.x=element_blank(),
-        panel.grid.minor.y=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.x=element_blank()) +
-  ylab('USD (million)') +
-  xlab('Year in phase (note: phase duration vary across projects and phases)') +
-  ggtitle('Cost per year in phase')
-ggplot(filter(phase_years, prob < 1), aes(as.factor(phase.year), prob*100)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
-  theme(panel.grid.major.x=element_blank(),
-        panel.grid.minor.y=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.x=element_blank()) +
-  ylab('USD (million)') +
-  xlab('Year in phase (note: phase duration vary across projects and phases)') +
-  ggtitle('Probability of success per year in phase')
-ggplot(filter(phase_years, revenue > 0), aes(as.factor(phase.year), revenue)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  facet_grid(rows=vars(phase), cols=vars(as.factor(phase.year)), scales='free') +
-  theme(panel.grid.major.x=element_blank(),
-        panel.grid.minor.y=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.text.x=element_blank()) +
-  ylab('USD (million)') +
-  xlab('Year in phase (note: phase duration vary across projects and phases)') +
-  ggtitle('Revenue per year in phase')
+# Plot: Mean properties per phase year of different phases
+p1 <- ggplot(phase_years_summary, aes(phase.year, cost.mean, color=phase)) +
+  geom_line() + geom_point() + ggtitle('Mean cost of year in phase')
+p2 <- ggplot(phase_years_summary, aes(phase.year, revenue.mean, color=phase)) +
+  geom_line() + geom_point() + ggtitle('Mean revenue of year in phase')
+p3 <- ggplot(phase_years_summary, aes(phase.year, prob.mean, color=phase)) +
+  geom_line() + geom_point() + ggtitle('Mean probability of success of year in phase')
+grid.arrange(p1, p2, p3, ncol=1)
 
 
 # Transform: Phase years from different phases
