@@ -110,42 +110,50 @@ phases$prob.b     <- phases$prob ^ (1/phases$time)
 
 
 # Plot: phase property distributions
-ggplot(phases, aes(cost, fill=phase)) +
+p1 <- ggplot(phases, aes(cost, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
-  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.y=element_blank()) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
-  ggtitle('Cost by phase') + xlab('USD (million)') + ylab('Frequency')
-ggplot(phases, aes(revenue, fill=phase)) +
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  xlab('Cost (million USD)')
+p2 <- ggplot(phases, aes(revenue, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
-  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.y=element_blank()) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
-  ggtitle('Revenue by phase') + xlab('USD (million)') + ylab('Frequency')
-ggplot(phases, aes(prob*100, fill=phase)) +
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  xlab('Revenue (million USD)')
+p3 <- ggplot(phases, aes(prob*100, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
-  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.y=element_blank()) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
-  ggtitle('Probability by phase') + xlab('Probability') + ylab('Frequency')
-ggplot(phases, aes(time, fill=phase)) +
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  xlab('Probability (%)')
+p4 <- ggplot(phases, aes(time, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
-  theme(axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.y=element_blank()) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 12)) +
-  ggtitle('Time by phase') + xlab('Years') + ylab('Frequency')
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  xlab('Duration (months)')
+grid.arrange(p1, p2, p3, p4, ncol=2, top='Phase input distributions')
 
 # Transform: phase properties to long from wide
 phase_props <- phases %>%
