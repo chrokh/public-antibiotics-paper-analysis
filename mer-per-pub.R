@@ -665,13 +665,6 @@ grid.arrange(p1, p2, ncol=1)
 
 
 
-# Plot: Final year NPV starting from different phases (violin plot)
-ggplot(final_year_from_phases, aes(from, cashflow.npv, fill=from)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
-  theme(legend.position='none') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 20)) +
-  ggtitle('Final year NPV starting from different phases')
-
 # Plot: Final year NPV starting from different phases (histogram)
 summary <- final_year_from_phases %>%
   group_by(from) %>%
@@ -687,18 +680,7 @@ ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
         legend.position='none') +
   facet_grid(from~., scale='free_y') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
-  ggtitle('Final year NPV starting from different phases')
-
-sub <- phase_years_from_phases %>%
-  filter(from == 'PC') %>%
-  group_by(subject, year) %>%
-  summarise(cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1))
-
-ggplot(sub, aes(cashflow.npv, as.factor(year))) +
-  geom_density_ridges(quantile_lines = TRUE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('NPV density at different exit years, starting from PC') +
-  xlab('NPV') + ylab('Exit year')
+  ggtitle('Project NPV starting from different phases')
 
 sub <- phase_years_from_phases %>%
   filter(from == 'PC') %>%
