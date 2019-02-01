@@ -1,7 +1,7 @@
 # This file generates a csv file of samples from distributions outlined here.
 
 # ============ CONFIG ===============
-N      = 100
+N      = 1000
 OUTPUT = 'output/data/phases.csv'
 SEED   = 1
 #====================================
