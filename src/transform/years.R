@@ -6,7 +6,7 @@ library(ggplot2)
 library(gridExtra)
 
 # Config
-INPUT  <- 'output/data/phases.csv'
+INPUT  <- 'output/data/treated_phases.csv'
 OUTPUT <- 'output/data/years.csv'
 
 
@@ -20,8 +20,8 @@ phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
 
 # Add timestamps to every observation
 phases <- phases %>%
-  group_by(subject) %>%
-  arrange(subject, phase) %>%
+  group_by(intervention, subject) %>%
+  arrange(intervention, subject, phase) %>%
   mutate(t = cumsum(time) - time)
 
 
@@ -72,11 +72,12 @@ for (x in 1:ceiling(max(phases$time) + 1)) {
   cost           <- base_cost + remainder_cost
   revenue        <- base_revenue + remainder_revenue
   prob           <- base_prob + remainder_prob
+  intervention   <- phases$intervention
   subject        <- phases$subject
   phase.year     <- x
   phase          <- phases$phase
   t              <- phases$t + phase.year - 1
-  df             <- tibble(subject, phase.year, t, phase, cost, revenue, prob, time, discount.rate)
+  df             <- tibble(intervention, subject, phase.year, t, phase, cost, revenue, prob, time, discount.rate)
   df             <- df[cost != 0 | revenue != 0 | prob > 0, ] # No need to keep years without cashflow
   phase_years    <- bind_rows(phase_years, df)
 }

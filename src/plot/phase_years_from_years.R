@@ -12,18 +12,20 @@ OUTPUT <- 'output/plots/phase_years_from_years.pdf'
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
 
-
-# Convert phases to ordered factor
+# Convert phase to ordered factor
 phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
 
+# Convert intervention to factor
+intervention_levels <- c('NONE', 'PCER', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER', 'FDMER')
+phase_years$intervention <- factor(phase_years$intervention, levels=intervention_levels)
 
 # Transform: Phase years from different phases
 phase_years_from_years <- tibble()
 for (yr in 1:(ceiling(max(phase_years$t)) + 1)) {
   pyfy <- phase_years %>%
     filter(t >= yr) %>%
-    group_by(subject) %>%
+    group_by(intervention, subject) %>%
     arrange(subject, t) %>%
     mutate(from            = yr,
            time.to         = t - min(t),
@@ -61,27 +63,24 @@ for (yr in 1:(ceiling(max(phase_years$t)) + 1)) {
   phase_years_from_years <- bind_rows(phase_years_from_years, pyfy)
 }
 
-
 # Summarize: phase years from years
 phase_years_from_years_summary <- phase_years_from_years %>%
-  group_by(year, from) %>%
+  group_by(intervention, year, from) %>%
   summarize(cum.mean    = mean(cum.cashflow),
             rv.cum.mean = mean(cashflow.rv.cum),
             npv.mean    = mean(cashflow.npv),
             rnpv.mean   = mean(cashflow.rnpv))
 
-
 # Transform: phase years from years summary from wide to long
 phase_years_from_years_summary_long <- phase_years_from_years_summary %>%
   gather('valuation', 'value', -year, -from)
-
 
 # Transform: Compute final year npv values from different years
 # TODO: Not sure if final year is NPV is becoming skewed by zero cashflow years
 # in the end. It seems to me that it shouldn't be a problem but: make some
 # calculations to ensure that this is definitely not a problem!
 final_year_from_years <- phase_years_from_years %>%
-  group_by(subject, from) %>%
+  group_by(intervention, subject, from) %>%
   filter(year == max(year)) %>%
   summarise(cashflow.npv    = tail(cashflow.npv, n=1),
             cashflow.rnpv   = tail(cashflow.rnpv, n=1),
@@ -91,7 +90,7 @@ final_year_from_years <- phase_years_from_years %>%
 
 # Summarize: Final year from year
 final_year_from_years_summary <- final_year_from_years %>%
-  group_by(from) %>%
+  group_by(intervention, from) %>%
   summarize(npv.mean    = mean(cashflow.npv),
             rnpv.mean   = mean(cashflow.rnpv),
             cum.mean    = mean(cum.cashflow),
@@ -99,26 +98,31 @@ final_year_from_years_summary <- final_year_from_years %>%
 
 # Transform: Final year from years summary from wide to long
 final_year_from_years_summary_long <- final_year_from_years_summary %>%
-  gather('valuation', 'value', -from)
-
-
+  gather('valuation', 'value', -from, -intervention)
 
 # Plot: mean rnpv/npv over time (from years)
-p1 <- ggplot(filter(final_year_from_years_summary_long,
-                    valuation=='npv.mean' | valuation=='rnpv.mean'),
-             aes(from, value, color=valuation)) +
-  geom_line() + geom_point() +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('Project value, starting from various years')
+for (treatment in intervention_levels) {
+  sub <- final_year_from_years_summary_long %>% filter(intervention == treatment)
 
-# Plot: final value starting from different years
-p2 <- ggplot(final_year_from_years_summary_long,
-             aes(from, value, color=valuation)) +
-  geom_line() + geom_point() +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  ggtitle('Project value, starting from various years')
+  # Convert valuation to factor so that we ensure legend stays consistent
+  # between the plits by using scale_fill_manual.
+  sub$valuation <- factor(sub$valuation)
 
-grid.arrange(p1, p2, ncol=1)
+  p1 <- ggplot(filter(sub, valuation=='npv.mean' | valuation=='rnpv.mean'),
+               aes(from, value, color=valuation)) +
+    geom_line() + geom_point() +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    scale_colour_discrete(drop=TRUE, limits = levels(sub$valuation)) +
+    ggtitle(sprintf('Project value, starting from various years (intervention: %s)', treatment))
 
+  # Plot: final value starting from different years
+  p2 <- ggplot(sub, aes(from, value, color=valuation)) +
+    geom_line() + geom_point() +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    scale_colour_discrete(drop=TRUE, limits = levels(sub$valuation)) +
+    ggtitle(sprintf('Project value, starting from various years (intervention: %s)', treatment))
+
+  grid.arrange(p1, p2, ncol=1)
+}

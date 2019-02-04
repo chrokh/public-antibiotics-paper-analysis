@@ -16,7 +16,8 @@ pdf(OUTPUT)
 phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
 
-
+# Only analyze control group
+phase_years <- filter(phase_years, intervention == 'NONE')
 
 # Plot: Properties per phase year of different phases
 ggplot(phase_years, aes(as.factor(phase.year), cost, fill=phase)) +

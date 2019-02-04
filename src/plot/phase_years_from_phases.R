@@ -13,6 +13,8 @@ OUTPUT <- 'output/plots/phase_years_from_phases.pdf'
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
 
+# Only analyze control group
+phase_years <- filter(phase_years, intervention == 'NONE')
 
 # Convert phases to ordered factor
 phase_levels <- c('PC','P1','P2','P3','P4','MP')

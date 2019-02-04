@@ -4,7 +4,7 @@ library(ggplot2)
 library(gridExtra)
 
 # config
-INPUT  <- 'output/data/phases.csv'
+INPUT  <- 'output/data/treated_phases.csv'
 OUTPUT <- 'output/plots/summary.pdf'
 
 
@@ -18,8 +18,11 @@ phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
 
 
+# Only do summary for control group and not treatment group
+sub <- filter(phases, intervention == 'NONE')
+
 # Plot: phase property distributions
-p1 <- ggplot(phases, aes(cost, fill=phase)) +
+p1 <- ggplot(sub, aes(cost, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -30,7 +33,7 @@ p1 <- ggplot(phases, aes(cost, fill=phase)) +
         legend.position='none') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
   xlab('Cost (million USD)')
-p2 <- ggplot(phases, aes(revenue, fill=phase)) +
+p2 <- ggplot(sub, aes(revenue, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -40,7 +43,7 @@ p2 <- ggplot(phases, aes(revenue, fill=phase)) +
         panel.grid.major.y=element_blank(),
         legend.position='none') +
   xlab('Revenue (million USD)')
-p3 <- ggplot(phases, aes(prob*100, fill=phase)) +
+p3 <- ggplot(sub, aes(prob*100, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -51,7 +54,7 @@ p3 <- ggplot(phases, aes(prob*100, fill=phase)) +
         legend.position='none') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   xlab('Probability (%)')
-p4 <- ggplot(phases, aes(time, fill=phase)) +
+p4 <- ggplot(sub, aes(time, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -62,11 +65,12 @@ p4 <- ggplot(phases, aes(time, fill=phase)) +
         legend.position='none') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
   xlab('Duration (months)')
+
 grid.arrange(p1, p2, p3, p4, ncol=2, top='Phase input distributions')
 
 
 # Transform: phase properties to long from wide
-phase_props <- phases %>%
+phase_props <- sub %>%
   filter(phase != 'MP') %>%
   select(1:6) %>%
   gather(key='prop', value='value', 3:6) %>%
@@ -76,23 +80,23 @@ phase_props <- phases %>%
 
 
 # Plot: property distribution across phases
-ggplot(filter(phase_props, !is.na(ratio)), aes(ratio*100, fill=phase)) +
+print(ggplot(filter(phase_props, !is.na(ratio)), aes(ratio*100, fill=phase)) +
   geom_density(alpha=0.75) +
   ggtitle('Property distribution across phases (grouped by property)') +
   facet_grid(prop ~ .) +
-  xlab('Percentage of property in phase') + ylab('Density')
-ggplot(phase_props, aes(ratio*100, fill=prop)) +
+  xlab('Percentage of property in phase') + ylab('Density'))
+print(ggplot(phase_props, aes(ratio*100, fill=prop)) +
   geom_density(alpha=0.75) +
   ggtitle('Property distribution across phases (grouped by phase)') +
   facet_grid(phase ~ .) +
-  xlab('Percentage of property in phase') + ylab('Density')
-ggplot(phase_props, aes(x=prop,y=ratio*100, fill=prop)) +
+  xlab('Percentage of property in phase') + ylab('Density'))
+print(ggplot(phase_props, aes(x=prop,y=ratio*100, fill=prop)) +
   geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
   ggtitle('Property distribution across phases') +
   facet_grid(~ phase) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1),
         axis.ticks.x=element_blank()) +
-  ylab('Percentage of property in phase') + xlab('Density')
+  ylab('Percentage of property in phase') + xlab('Density'))
 
 
 # Summarize: property distribution across phases
@@ -101,36 +105,36 @@ phase_props_summary <- phase_props %>%
   summarise(ratio.mean = mean(ratio))
 
 # Plot: summary of property distribution across phases
-ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+print(ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
   geom_bar(stat='identity', aes(fill=phase), position='dodge') +
   labs(fill='Phase') +
   xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
-  ggtitle('Mean property distribution across phases (grouped by property)')
+  ggtitle('Mean property distribution across phases (grouped by property)'))
 
 # Plot: summary of property distribution across phases
-ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+print(ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
   geom_bar(stat='identity', aes(fill=phase), position='stack') +
   labs(fill='Phase') +
   xlab('Property & Phase') + ylab('Mean percentage of property in phase') +
-  ggtitle('Mean property distribution across phases (grouped by property)')
+  ggtitle('Mean property distribution across phases (grouped by property)'))
 
 
 # Compute: cumulative phase properties
-phases <- phases %>% group_by(subject) %>%
+sub <- sub %>% group_by(subject) %>%
   mutate(cum_cost = cumsum(cost),
          cum_revenue = cumsum(revenue),
          cum_time    = cumsum(time),
          cum_prob    = cumprod(prob))
 
 # Transform: cumulative phase properties to long from wide
-cum_phase_props <- phases %>%
+cum_phase_props <- sub %>%
   filter(phase != 'MP') %>%
   select(c(1, 2, cum_cost:cum_prob)) %>%
   gather(key='prop', value='value', cum_cost:cum_prob)
 
 
 # Plot: cumulative properties per phase (density plot)
-ggplot(filter(cum_phase_props, prop!='cum_revenue'),
+print(ggplot(filter(cum_phase_props, prop!='cum_revenue'),
        aes(value, fill=phase)) +
   facet_wrap(prop ~ ., scale='free', ncol=1) +
   geom_density(alpha=0.75) +
@@ -140,13 +144,14 @@ ggplot(filter(cum_phase_props, prop!='cum_revenue'),
         panel.grid.major.y=element_blank()) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   ggtitle('Cumulative properties by end of phase') +
-  ylab('Frequency') + xlab(element_blank()) + labs(fill='Phase')
+  ylab('Frequency') + xlab(element_blank()) + labs(fill='Phase'))
 
 # Plot: cumulative properties per phase (violin plot)
-ggplot(filter(cum_phase_props, prop!='cum_revenue'),
+print(ggplot(filter(cum_phase_props, prop!='cum_revenue'),
        aes(phase, value, fill=phase)) +
   geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
   facet_wrap(prop ~ ., scale='free', ncol=1) +
   ggtitle('Cumulative properties by end of phase') +
-  xlab('Phase') + ylab(element_blank()) + labs(fill='Phase')
+  xlab('Phase') + ylab(element_blank()) + labs(fill='Phase'))
+
 

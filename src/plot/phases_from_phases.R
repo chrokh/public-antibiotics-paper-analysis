@@ -2,7 +2,7 @@ library(dplyr)
 library(ggplot2)
 
 # Config
-INPUT  <- 'output/data/phases.csv'
+INPUT  <- 'output/data/treated_phases.csv'
 OUTPUT <- 'output/plots/phases_from_phases.pdf'
 
 
@@ -15,6 +15,8 @@ pdf(OUTPUT)
 phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
 
+# Only analyze control group
+phases <- filter(phases, intervention == 'NONE')
 
 # Transform: Cartesian product of phases (phase from phase)
 phases_from_phases <- tibble()
