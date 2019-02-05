@@ -16,7 +16,7 @@ phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
 
 # Convert intervention to factor
-intervention_levels <- c('NONE', 'PCER', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER', 'FDMER')
+intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
 phases$intervention <- factor(phases$intervention, levels=intervention_levels)
 
 # Separate control and treatment group

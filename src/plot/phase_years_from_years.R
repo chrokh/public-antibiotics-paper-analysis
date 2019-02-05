@@ -17,7 +17,7 @@ phase_levels <- c('PC','P1','P2','P3','P4','MP')
 phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
 
 # Convert intervention to factor
-intervention_levels <- c('NONE', 'PCER', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER', 'FDMER')
+intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
 phase_years$intervention <- factor(phase_years$intervention, levels=intervention_levels)
 
 # Transform: Phase years from different phases
