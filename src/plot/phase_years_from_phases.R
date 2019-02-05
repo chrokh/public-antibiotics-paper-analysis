@@ -185,11 +185,12 @@ grid.arrange(p1, p2, ncol=1)
 # Plot: Final year NPV starting from different phases (histogram)
 summary <- final_year_from_phases %>%
   group_by(from) %>%
-  summarize(median = median(cashflow.npv))
-ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
+  summarize(rnpv.median = median(cashflow.rnpv),
+            npv.median = median(cashflow.npv))
+p1 <- ggplot(final_year_from_phases, aes(cashflow.rnpv, fill=from)) +
   geom_histogram(aes(y=..density..)) +
   geom_density(col='black', fill='transparent') +
-  geom_vline(data=summary, aes(xintercept=median), colour='red') +
+  geom_vline(data=summary, aes(xintercept=rnpv.median), colour='red') +
   theme(axis.text.y=element_blank(),
         axis.ticks.y=element_blank(),
         panel.grid.minor.y=element_blank(),
@@ -197,16 +198,37 @@ ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
         legend.position='none') +
   facet_grid(from~., scale='free_y') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
-  ggtitle('Project NPV starting from different phases')
+  ggtitle('Project rNPV starting from different phases (red line=median)')
+p2 <- ggplot(final_year_from_phases, aes(cashflow.npv, fill=from)) +
+  geom_histogram(aes(y=..density..)) +
+  geom_density(col='black', fill='transparent') +
+  geom_vline(data=summary, aes(xintercept=npv.median), colour='red') +
+  theme(axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  facet_grid(from~., scale='free_y') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 20)) +
+  ggtitle('Project NPV starting from different phases (red line=median)')
+grid.arrange(p1, p2)
 
+# Summarize: rNPV and NPV at different exit phases
 sub <- phase_years_from_phases %>%
   filter(from == 'PC') %>%
   group_by(subject, phase) %>%
-  summarise(cashflow.npv = tail(revenue.npv, n=1) - tail(cost.npv, n=1))
+  summarise(cashflow.npv = tail(cashflow.npv, n=1),
+            cashflow.rnpv = tail(cashflow.rnpv, n=1))
 
-ggplot(sub, aes(cashflow.npv, phase)) +
+# Plot: rNPV and NPV at different exit phases
+p1 <- ggplot(sub, aes(cashflow.rnpv, phase)) +
+  geom_density_ridges(quantile_lines = TRUE) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  ggtitle('rNPV density when exiting at the end(?) of different phases, starting from PC') +
+  xlab('rNPV') + ylab('Exit phase')
+p2 <- ggplot(sub, aes(cashflow.npv, phase)) +
   geom_density_ridges(quantile_lines = TRUE) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   ggtitle('NPV density when exiting at the end(?) of different phases, starting from PC') +
-  xlab('NPV') + ylab('Exit year')
-
+  xlab('NPV') + ylab('Exit phase')
+grid.arrange(p1, p2, ncol=1)
