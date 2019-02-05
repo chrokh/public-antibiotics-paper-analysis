@@ -16,6 +16,9 @@ clear &&
 echo -e "intervention_input_summary.R:\n" &&
 Rscript src/plot/intervention_input_summary.R &&
 clear &&
+echo -e "interventions.R:\n" &&
+Rscript src/plot/interventions.R &&
+clear &&
 echo -e "phase_years_from_phases.R:\n" &&
 Rscript src/plot/phase_years_from_phases.R &&
 clear &&
