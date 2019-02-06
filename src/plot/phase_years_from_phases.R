@@ -10,6 +10,7 @@ OUTPUT <- 'output/plots/phase_years_from_phases.pdf'
 
 
 # I/O
+source('src/shared.R')
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
 
@@ -17,17 +18,16 @@ pdf(OUTPUT)
 phase_years <- filter(phase_years, intervention == 'NONE')
 
 # Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
+phase_years$phase <- factor(phase_years$phase, levels=PHASE_LEVELS, ordered=TRUE)
 
 # Transform: Phase years from different phases
 phase_years_from_phases <- tibble()
-for (from in phase_levels) {
+for (from in PHASE_LEVELS) {
   pyfp <- phase_years %>%
     filter(phase >= from) %>%
     group_by(subject) %>%
     arrange(subject, t) %>%
-    mutate(from          = factor(from, levels=phase_levels, ordered=TRUE),
+    mutate(from          = factor(from, levels=PHASE_LEVELS, ordered=TRUE),
            time.to       = t - min(t),
            cashflow      = revenue - cost,
            cum.cost      = cumsum(cost),

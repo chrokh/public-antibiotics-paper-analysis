@@ -11,16 +11,13 @@ set.seed(1)
 
 
 # I/O
-phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
+phase_years <- read.csv(INPUT)
+source('src/shared.R')
 
-# Convert phase to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
-
-# Convert intervention to factor
-intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
-phase_years$intervention <- factor(phase_years$intervention, levels=intervention_levels)
+# Convert factors to factors
+phase_years$phase <- factor(phase_years$phase, levels=PHASE_LEVELS, ordered=TRUE)
+phase_years$intervention <- factor(phase_years$intervention, levels=INTERVENTION_LEVELS)
 
 # Rename: private sector discount rate
 names(phase_years)[names(phase_years) == 'discount.rate'] <- 'private_discount_rate'

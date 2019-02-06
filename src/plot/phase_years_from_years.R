@@ -9,16 +9,13 @@ OUTPUT <- 'output/plots/phase_years_from_years.pdf'
 
 
 # I/O
+source('src/shared.R')
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
 
-# Convert phase to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phase_years$phase <- factor(phase_years$phase, levels=phase_levels, ordered=TRUE)
-
-# Convert intervention to factor
-intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
-phase_years$intervention <- factor(phase_years$intervention, levels=intervention_levels)
+# Convert factors to factors
+phase_years$phase <- factor(phase_years$phase, levels=PHASE_LEVELS, ordered=TRUE)
+phase_years$intervention <- factor(phase_years$intervention, levels=INTERVENTION_LEVELS)
 
 # Transform: Phase years from different phases
 phase_years_from_years <- tibble()
@@ -101,7 +98,7 @@ final_year_from_years_summary_long <- final_year_from_years_summary %>%
   gather('valuation', 'value', -from, -intervention)
 
 # Plot: mean rnpv/npv over time (from years)
-for (treatment in intervention_levels) {
+for (treatment in INTERVENTION_LEVELS) {
   sub <- final_year_from_years_summary_long %>% filter(intervention == treatment)
 
   # Convert valuation to factor so that we ensure legend stays consistent

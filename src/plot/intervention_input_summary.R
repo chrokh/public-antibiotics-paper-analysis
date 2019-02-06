@@ -7,17 +7,14 @@ OUTPUT <- 'output/plots/intervention_input_summary.pdf'
 
 
 # I/O
+source('src/shared.R')
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
 
-# Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
-
-# Convert intervention to factor
-intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
-phases$intervention <- factor(phases$intervention, levels=intervention_levels)
+# Convert factors to factors
+phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
+phases$intervention <- factor(phases$intervention, levels=INTERVENTION_LEVELS)
 
 # Separate control and treatment group
 control <- filter(phases, intervention == 'NONE') %>% arrange(subject, phase)

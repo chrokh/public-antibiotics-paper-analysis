@@ -9,13 +9,13 @@ OUTPUT <- 'output/plots/summary.pdf'
 
 
 # I/O
+source('src/shared.R')
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
 
 # Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
+phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
 
 
 # Only do summary for control group and not treatment group

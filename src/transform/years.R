@@ -11,12 +11,12 @@ OUTPUT <- 'output/data/years.csv'
 
 
 # I/O
+source('src/shared.R')
 phases <- read.csv(INPUT)
 
 
 # Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
+phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
 
 # Add timestamps to every observation
 phases <- phases %>%

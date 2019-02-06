@@ -7,25 +7,25 @@ OUTPUT <- 'output/plots/phases_from_phases.pdf'
 
 
 # I/O
+source('src/shared.R')
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
 
 # Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
+phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
 
 # Only analyze control group
 phases <- filter(phases, intervention == 'NONE')
 
 # Transform: Cartesian product of phases (phase from phase)
 phases_from_phases <- tibble()
-for (from in phase_levels) {
+for (from in PHASE_LEVELS) {
   pfp <- phases %>%
     filter(phase >= from) %>%
     group_by(subject) %>%
     transmute(phase = phase,
-           from = factor(from, levels=phase_levels, ordered=TRUE),
+           from = factor(from, levels=PHASE_LEVELS, ordered=TRUE),
            time.to = cumsum(time) - time,
            # Compute: PVs
            cost.pv    = cost / ((1 + discount.rate) ^ time.to),

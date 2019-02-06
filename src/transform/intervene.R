@@ -3,18 +3,13 @@ INPUT  <- 'output/data/phases.csv'
 OUTPUT <- 'output/data/treated_phases.csv'
 
 # I/O
+source('src/shared.R')
 phases <- read.csv(INPUT)
 N      <- nrow(phases)
 
-# Convert phases to ordered factor
-phase_levels <- c('PC','P1','P2','P3','P4','MP')
-phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
-
-# Possible interventions
-intervention_levels <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
-
-# Set default intervention
-phases$intervention <- factor('NONE', levels=intervention_levels)
+# Convert factors to factors
+phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
+phases$intervention <- factor('NONE', levels=INTERVENTION_LEVELS)
 
 # Log sampling function
 log10_sample <- function (min, max, magnitude_min, magnitude_max) {

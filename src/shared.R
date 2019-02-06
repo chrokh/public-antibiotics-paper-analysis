@@ -1,0 +1,2 @@
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
+INTERVENTION_LEVELS <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
