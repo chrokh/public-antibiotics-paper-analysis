@@ -29,7 +29,7 @@ for (from in PHASE_LEVELS) {
            time.to = cumsum(time) - time,
            # Compute: PVs
            cost.pv    = cost / ((1 + discount.rate) ^ time.to),
-           revenue.pv = revenue / ((1 + discount.rate) ^ time.to))
+           revenue.pv = (sales + grants) / ((1 + discount.rate) ^ time.to))
   phases_from_phases <- bind_rows(phases_from_phases, pfp)
 }
 

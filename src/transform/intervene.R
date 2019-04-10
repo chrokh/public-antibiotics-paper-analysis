@@ -7,7 +7,7 @@ source('src/shared.R')
 phases <- read.csv(INPUT)
 N      <- nrow(phases)
 
-# Convert factors to factors
+# Convert factors to ordered factors
 phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
 phases$intervention <- factor('NONE', levels=INTERVENTION_LEVELS)
 
@@ -19,30 +19,27 @@ log10_sample <- function (min, max, magnitude_min, magnitude_max) {
 # Intervention: P1ER
 P1ER <- data.frame(phases)
 P1ER$intervention <- 'P1ER'
-P1ER$revenue   <- ifelse(P1ER$phase=='P1', P1ER$revenue + log10_sample(1, 9, 1, 3), P1ER$revenue)
+P1ER$grants   <- ifelse(P1ER$phase=='P1', P1ER$grants + log10_sample(1, 9, 1, 3), P1ER$grants)
 
 # Intervention: P2ER
 P2ER <- data.frame(phases)
 P2ER$intervention <- 'P2ER'
-P2ER$revenue   <- ifelse(P2ER$phase=='P2', P2ER$revenue + log10_sample(1, 9, 1, 3), P2ER$revenue)
+P2ER$grants   <- ifelse(P2ER$phase=='P2', P2ER$grants + log10_sample(1, 9, 1, 3), P2ER$grants)
 
 # Intervention: P3ER
 P3ER <- data.frame(phases)
 P3ER$intervention <- 'P3ER'
-P3ER$revenue   <- ifelse(P3ER$phase=='P3', P3ER$revenue + log10_sample(1, 9, 1, 3), P3ER$revenue)
+P3ER$grants   <- ifelse(P3ER$phase=='P3', P3ER$grants + log10_sample(1, 9, 1, 3), P3ER$grants)
 
 # Intervention: P4ER
 P4ER <- data.frame(phases)
 P4ER$intervention <- 'P4ER'
-P4ER$revenue   <- ifelse(P4ER$phase=='P4', P4ER$revenue + log10_sample(1, 9, 1, 3), P4ER$revenue)
+P4ER$grants   <- ifelse(P4ER$phase=='P4', P4ER$grants + log10_sample(1, 9, 1, 3), P4ER$grants)
 
-# Intervention: PDMER
-# TODO: This will not work properly later since the MER will be spread over
-# market years in interpolation step.
-# NOTE: Adds to old revenue. I.e. partial delinkage.
+# Intervention: PDMER (partial delinkage)
 PDMER <- data.frame(phases)
 PDMER$intervention <- 'PDMER'
-PDMER$revenue   <- ifelse(PDMER$phase=='MP', PDMER$revenue + log10_sample(1, 9, 1, 3), PDMER$revenue)
+PDMER$grants   <- ifelse(PDMER$phase=='MP', PDMER$grants + log10_sample(1, 9, 1, 3), PDMER$grants)
 
 # Merge all datasets
 treated <- rbind(phases, P1ER, P2ER, P3ER, P4ER, PDMER)

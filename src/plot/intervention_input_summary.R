@@ -26,15 +26,14 @@ diffs <- treated %>% group_by(intervention) %>%
   transmute(phase   = phase,
             time    = time - control$time,
             cost    = cost - control$cost,
-            revenue = revenue - control$revenue,
+            sales   = sales - control$sales,
+            grants  = grants - control$grants,
             prob    = prob - control$prob,
             discount.rate = discount.rate - control$discount.rate)
 
 
 # Only plot where there is a difference
-ggplot(filter(diffs, revenue>0), aes(revenue,
-                                     fill=phase)) +
-                                     #fill=interaction(phase, intervention))) +
+ggplot(filter(diffs, grants>0), aes(grants, fill=phase)) +
 geom_histogram() +
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),

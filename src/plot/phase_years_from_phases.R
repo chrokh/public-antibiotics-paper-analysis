@@ -232,3 +232,4 @@ p2 <- ggplot(sub, aes(cashflow.npv, phase)) +
   ggtitle('NPV density when exiting at the end(?) of different phases, starting from PC') +
   xlab('NPV') + ylab('Exit phase')
 grid.arrange(p1, p2, ncol=1)
+

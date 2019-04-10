@@ -24,54 +24,62 @@ phases <- phases %>%
   arrange(intervention, subject, phase) %>%
   mutate(t = cumsum(time) - time)
 
+# TODO: This file is a mess and while it seems to work it needs to be cleaned up!
 
-
-# Compute: Cost/revenue slopes and offsets to allow computing discrete
-# cashflows for years TODO: Separate market into separate dataset and then do
-# the yearly2 calc for two datasets so that we don't have to deal with
-# exceptions and instead simply assume that everything is either constantly or
-# linearly distributed in the development and market data set respectively.
-# TODO: Actually, shouldn't this market stuff really be handled in the
-# generate.R file so that every 'dataset' is independently responsible for
-# determining how the market is spread over years?
-phases$cost.a     <- ifelse(phases$phase=='MP', ((phases$cost * 2 / (phases$time + 1)) / phases$time), 0)
-phases$cost.b     <- ifelse(phases$phase=='MP', 0, (phases$cost / phases$time))
-phases$revenue.a  <- ifelse(phases$phase=='MP', ((phases$revenue * 2 / (phases$time + 1)) / phases$time), 0)
-phases$revenue.b  <- ifelse(phases$phase=='MP', 0, (phases$revenue / phases$time))
-phases$prob.a     <- 0
-phases$prob.b     <- phases$prob ^ (1/phases$time)
-
+# TODO: Can be simplified and moved into the loop (to improve readability) now
+# that we've separated grants from sales. This means that the
+# easing/distribution function does not vary over rows but rather over cols.
+# ======
+# Compute: Sales slopes and offsets to allow computing discrete
+phases$cost.a     <- 0
+phases$cost.b     <- phases$cost / phases$time
+phases$sales.a    <- (phases$sales * 2 / (phases$time + 1)) / phases$time
+phases$sales.b    <- 0
+# Compute: Discrete prob steps
+phases$prob_full_step <- phases$prob ^ (1 / phases$time) # NOTE: Not applicable if time < 1
+phases$prob_remainder <- phases$prob / (phases$prob_full_step ^ floor(phases$time))
 
 # Transform: To cashflows over time (phase yearly)
 phase_years <- tibble()
 for (x in 1:ceiling(max(phases$time) + 1)) {
+
   # Prepare
   within_phase   <- x <= phases$time
   not_whole_year <- x-phases$time>0 & x-phases$time<1
-  #base_cashflow      <- ifelse(within_phase, phases$cashflow.a * x + phases$cashflow.b, 0)
-  #remainder_cashflow <- ifelse(not_whole_year, (phases$time-floor(phases$time))*(phases$cashflow/phases$time), 0)
+
+  # cost
   base_cost          <- ifelse(within_phase, phases$cost.a * x + phases$cost.b, 0)
   remainder_cost     <- ifelse(not_whole_year, (phases$time-floor(phases$time))*(phases$cost/phases$time), 0)
-  base_revenue       <- ifelse(within_phase, phases$revenue.a * x + phases$revenue.b, 0)
-  remainder_revenue  <- ifelse(not_whole_year, (phases$time-floor(phases$time))*(phases$revenue/phases$time), 0)
-  base_prob          <- ifelse(within_phase, phases$prob.a * x + phases$prob.b, 0)
-  remainder_prob     <- ifelse(not_whole_year, phases$prob / ((phases$prob.a*x+phases$prob.b) ^ floor(phases$time)), 0)
   # NOTE: The remainder is computed by assuming that the value is evenly
   # distributed over the whole phase (i.e. constantly). If this is not true
-  # then the remainder will be incorrectly computed. However, since we assume
-  # that phase properties are indeed constantly distributed over the course of
-  # the phase, it is not a problem for phase properties. While we do assume
-  # that market sales grow linearly this is not a problem since there will be
-  # no remainder given that we assume that all markets span 10 years. However,
-  # please be very careful and make sure you get this right!!
+  # then the remainder will be incorrectly computed.
   # NOTE: This computation is a bit odd since there will never be a base
   # cashflow and a remainder at the same time.
   # Make data frame
   discount.rate  <- phases$discount.rate
   time           <- phases$time
   cost           <- base_cost + remainder_cost
-  revenue        <- base_revenue + remainder_revenue
-  prob           <- base_prob + remainder_prob
+
+  # Sales
+  # NOTE: We're iterating with + 1 to capture fractional years, but this means
+  # that we can reach a year for which there should be no sales.
+  sales <- ifelse(within_phase, phases$sales.a * x + phases$sales.b, 0)
+
+  # Grants
+  if (x == 1) {
+    grants <- phases$grants
+  } else {
+    grants <- 0
+  }
+
+  # Revenue
+  revenue        <- sales + grants
+
+  # Prob
+  prob_in_full <- ifelse(within_phase, phases$prob_full_step, 0)
+  prob_in_partial <- ifelse(not_whole_year, phases$prob_remainder, 0)
+  prob <- prob_in_full + prob_in_partial
+
   intervention   <- phases$intervention
   subject        <- phases$subject
   phase.year     <- x
@@ -82,6 +90,4 @@ for (x in 1:ceiling(max(phases$time) + 1)) {
   phase_years    <- bind_rows(phase_years, df)
 }
 
-
 write.csv(phase_years, row.names=FALSE, file=OUTPUT)
-
