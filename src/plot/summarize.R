@@ -44,7 +44,7 @@ p2 <- ggplot(sub, aes(sales, fill=phase)) +
         panel.grid.major.y=element_blank(),
         legend.position='none') +
   xlab('Sales (million USD)')
-p5 <- ggplot(sub, aes(grants, fill=phase)) +
+p5 <- ggplot(sub, aes(prizes, fill=phase)) +
   geom_histogram() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -134,7 +134,7 @@ print(ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=r
 sub <- sub %>% group_by(subject) %>%
   mutate(cum_cost   = cumsum(cost),
          cum_sales  = cumsum(sales),
-         cum_grants = cumsum(grants),
+         cum_prizes = cumsum(prizes),
          cum_time   = cumsum(time),
          cum_prob   = cumprod(prob))
 

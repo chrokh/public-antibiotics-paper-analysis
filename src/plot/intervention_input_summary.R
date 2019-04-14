@@ -29,13 +29,13 @@ diffs <- treated %>% group_by(intervention) %>%
             time    = time - control$time,
             cost    = cost - control$cost,
             sales   = sales - control$sales,
-            grants  = grants - control$grants,
+            prizes  = prizes - control$prizes,
             prob    = prob - control$prob,
             discount.rate = discount.rate - control$discount.rate)
 
 
 # Only plot where there is a difference
-ggplot(filter(diffs, grants>0), aes(grants, fill=phase)) +
+ggplot(filter(diffs, prizes>0), aes(prizes, fill=phase)) +
 geom_histogram() +
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),
