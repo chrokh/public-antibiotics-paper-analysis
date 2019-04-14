@@ -1,5 +1,6 @@
 #!/bin/bash
 
+mkdir -p output/plots
 clear &&
 echo -e "summarize.R:\n" &&
 Rscript src/plot/summarize.R &&

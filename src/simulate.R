@@ -203,6 +203,7 @@ to_years <- function (phases) {
 phases <- sample(1000)
 intervened <- intervene(phases)
 years <- to_years(intervened)
+dir.create('output/data', recursive=TRUE)
 write.csv(phases, row.names=FALSE, file='output/data/phases.csv')
 write.csv(intervened, row.names=FALSE, file='output/data/treated_phases.csv')
 write.csv(years, row.names=FALSE, file='output/data/years.csv')
