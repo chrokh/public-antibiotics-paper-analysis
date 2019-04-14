@@ -7,10 +7,12 @@ OUTPUT <- 'output/plots/intervention_input_summary.pdf'
 
 
 # I/O
-source('src/shared.R')
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
+# Factors
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
+INTERVENTION_LEVELS <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
 
 # Convert factors to factors
 phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)

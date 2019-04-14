@@ -1,15 +1,6 @@
 #!/bin/bash
 
 clear &&
-echo -e "phases.R:\n" &&
-Rscript src/sample/phases.R &&
-clear &&
-echo -e "intervene.R:\n" &&
-Rscript src/transform/intervene.R &&
-clear &&
-echo -e "years.R:\n" &&
-Rscript src/transform/years.R &&
-clear &&
 echo -e "summarize.R:\n" &&
 Rscript src/plot/summarize.R &&
 clear &&

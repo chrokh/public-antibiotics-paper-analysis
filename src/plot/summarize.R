@@ -9,10 +9,11 @@ OUTPUT <- 'output/plots/summary.pdf'
 
 
 # I/O
-source('src/shared.R')
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
+# Factors
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
 
 # Convert phases to ordered factor
 phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)

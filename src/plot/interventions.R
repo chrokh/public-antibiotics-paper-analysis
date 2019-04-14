@@ -13,7 +13,10 @@ set.seed(1)
 # I/O
 pdf(OUTPUT)
 phase_years <- read.csv(INPUT)
-source('src/shared.R')
+
+# Factors
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
+INTERVENTION_LEVELS <- c('NONE', 'P1ER', 'P2ER', 'P3ER', 'P4ER', 'PDMER')
 
 # Convert factors to factors
 phase_years$phase <- factor(phase_years$phase, levels=PHASE_LEVELS, ordered=TRUE)

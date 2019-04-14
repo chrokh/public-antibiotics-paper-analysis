@@ -10,9 +10,11 @@ OUTPUT <- 'output/plots/phase_years_from_phases.pdf'
 
 
 # I/O
-source('src/shared.R')
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
+
+# Factors
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
 
 # Only analyze control group
 phase_years <- filter(phase_years, intervention == 'NONE')

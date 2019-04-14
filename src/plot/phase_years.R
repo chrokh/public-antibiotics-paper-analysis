@@ -8,10 +8,11 @@ OUTPUT <- 'output/plots/phase_years.pdf'
 
 
 # I/O
-source('src/shared.R')
 phase_years <- read.csv(INPUT)
 pdf(OUTPUT)
 
+# Factors
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
 
 # Convert phases to ordered factor
 phase_years$phase <- factor(phase_years$phase, levels=PHASE_LEVELS, ordered=TRUE)
