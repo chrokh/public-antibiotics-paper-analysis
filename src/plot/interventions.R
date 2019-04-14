@@ -5,8 +5,8 @@ library(gridExtra)
 library(scales)
 
 # Config
-INPUT  <- 'output/data/years.csv'
-OUTPUT <- 'output/plots/interventions.pdf'
+INPUT  <- 'years.csv'
+OUTPUT <- 'interventions.pdf'
 set.seed(1)
 
 

@@ -4,8 +4,8 @@ library(ggplot2)
 library(gridExtra)
 
 # config
-INPUT  <- 'output/data/treated_phases.csv'
-OUTPUT <- 'output/plots/summary.pdf'
+INPUT  <- 'treated_phases.csv'
+OUTPUT <- 'summary.pdf'
 
 
 # I/O

@@ -5,8 +5,8 @@ library(ggridges)
 library(gridExtra)
 
 # Config
-INPUT  <- 'output/data/years.csv'
-OUTPUT <- 'output/plots/phase_years_from_phases.pdf'
+INPUT  <- 'years.csv'
+OUTPUT <- 'phase_years_from_phases.pdf'
 
 
 # I/O

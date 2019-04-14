@@ -4,8 +4,8 @@ library(ggplot2)
 library(gridExtra)
 
 # Config
-INPUT  <- 'output/data/years.csv'
-OUTPUT <- 'output/plots/phase_years_from_years.pdf'
+INPUT  <- 'years.csv'
+OUTPUT <- 'phase_years_from_years.pdf'
 
 
 # I/O

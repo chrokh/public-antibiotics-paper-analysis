@@ -2,8 +2,8 @@ library(dplyr)
 library(ggplot2)
 
 # config
-INPUT  <- 'output/data/treated_phases.csv'
-OUTPUT <- 'output/plots/intervention_input_summary.pdf'
+INPUT  <- 'treated_phases.csv'
+OUTPUT <- 'intervention_input_summary.pdf'
 
 
 # I/O
