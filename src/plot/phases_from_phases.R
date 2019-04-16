@@ -5,16 +5,12 @@ library(ggplot2)
 INPUT  <- 'treated_phases.csv'
 OUTPUT <- 'phases_from_phases.pdf'
 
-
 # I/O
 phases <- read.csv(INPUT)
 pdf(OUTPUT)
 
-# Factors
-PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
-
-
 # Convert phases to ordered factor
+PHASE_LEVELS <- c('PC','P1','P2','P3','P4','MP')
 phases$phase <- factor(phases$phase, levels=PHASE_LEVELS, ordered=TRUE)
 
 # Only analyze control group
@@ -36,31 +32,74 @@ for (from in PHASE_LEVELS) {
 }
 
 
-# Plot: PV of different properties from different phases (violin matrices)
-ggplot(filter(phases_from_phases, cost.pv>0), aes(phase, cost.pv, fill=from)) +
+# ==================================
+# Cost PV from different phases
+# ==================================
+
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(phase, cost.pv, fill=from)) +
   geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
   ggtitle('Cost PV (present value) from the perspective of different phases') +
   facet_grid(rows=vars(from), cols=vars(phase), scales='free')
-ggplot(filter(phases_from_phases, revenue.pv>0), aes(phase, revenue.pv, fill=from)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('Revenue PV (present value) from the perspective of different phases')
-  #facet_grid(rows=vars(from), cols=vars(phase), scales='free')
-ggplot(filter(phases_from_phases, (revenue.pv-cost.pv)!=0), aes(phase, (revenue.pv-cost.pv), fill=from)) +
-  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
-  ggtitle('PV (present value) from the perspective of different phases') +
-  facet_grid(rows=vars(from), cols=vars(phase), scales='free')
 
-# Plot: PV of different properties from different phases (density plots)
-# TODO: Why is P4 from P4 not a single line since it's a constant value?
-# SOLUTION: Increase bandwidth (bw). Not sure if it's an appropriate solution
-# though. Or switch to histograms.
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(phase, cost.pv, fill=from)) +
+  geom_boxplot(alpha=0.7) +
+  ggtitle('Cost PV (present value) from the perspective of different phases')
+
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(from, cost.pv, fill=phase)) +
+  geom_boxplot(alpha=0.7) +
+  ggtitle('Cost PV (present value) from the perspective of different phases')
+
+# TODO: NOTE: Assumes distribution (normal?). Consider e.g. p4 from p4. Should be line/point.
 phases_from_phases %>% filter(cost.pv > 0) %>%
   ggplot(aes(cost.pv, fill=from)) +
-  geom_density(alpha=0.3) +
+  geom_density(alpha=0.5, bw=2) +
   ggtitle('Cost PV (present value) from the perspective of different phases') +
   facet_grid(phase ~ ., scales='free_y') +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   xlab('PV (million USD)') + ylab('Density')
+
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(cost.pv, fill=phase)) +
+  geom_density(alpha=0.5, bw=2) +
+  ggtitle('Cost PV (present value) from the perspective of different phases') +
+  facet_grid(from ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(cost.pv, fill=from, color=from)) +
+  geom_histogram(binwidth=2, alpha=0.5, position='identity') +
+  ggtitle('Cost PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Frequency')
+
+phases_from_phases %>% filter(cost.pv > 0) %>%
+  ggplot(aes(cost.pv, fill=phase, color=phase)) +
+  geom_histogram(binwidth=2, alpha=0.5, position='identity') +
+  ggtitle('Cost PV (present value) from the perspective of different phases') +
+  facet_grid(from ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Frequency')
+
+
+# ======================================
+# Revenue PV from different phases
+# ======================================
+
+phases_from_phases %>% filter(revenue.pv > 0) %>%
+  ggplot(aes(phase, revenue.pv, fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('Revenue PV (present value) from the perspective of different phases')
+
+phases_from_phases %>% filter(revenue.pv > 0) %>%
+  ggplot(aes(phase, revenue.pv, fill=from)) +
+  geom_boxplot(alpha=0.7) +
+  ggtitle('Revenue PV (present value) from the perspective of different phases')
+
 phases_from_phases %>% filter(revenue.pv > 0) %>%
   ggplot(aes(revenue.pv, fill=from)) +
   geom_density(alpha=0.3) +
@@ -69,6 +108,79 @@ phases_from_phases %>% filter(revenue.pv > 0) %>%
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   xlab('PV (million USD)') + ylab('Density')
 
+phases_from_phases %>% filter(revenue.pv > 0) %>%
+  ggplot(aes(revenue.pv, fill=from, color=from)) +
+  geom_histogram(binwidth=50, alpha=0.5, position='identity') +
+  ggtitle('Revenue PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+
+
+# ==============================
+# PV from different phases
+# ==============================
+
+with_pv <- phases_from_phases %>%
+  filter(from != 'MP') %>%
+  filter(phase != 'MP') %>%
+  filter(revenue.pv - cost.pv != 0)
+with_pv$pv <- with_pv$revenue.pv - with_pv$cost.pv
+
+with_pv %>%
+  ggplot(aes(phase, pv, fill=from)) +
+  geom_violin(draw_quantiles=c(0.25, 0.5, 0.75), alpha=0.75) +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(rows=vars(from), cols=vars(phase), scales='free')
+
+with_pv %>%
+  ggplot(aes(phase, pv, fill=from)) +
+  geom_boxplot(alpha=0.7) +
+  ggtitle('PV (present value) from the perspective of different phases')
+
+with_pv %>%
+  ggplot(aes(from, pv, fill=phase)) +
+  geom_boxplot(alpha=0.7) +
+  ggtitle('PV (present value) from the perspective of different phases')
+
+with_pv %>%
+  ggplot(aes(pv, fill=from)) +
+  # TODO: NOTE: Assumes distribution (normal?). Consider e.g. p4 from p4. Should be line/point.
+  geom_density(alpha=0.5, bw=2) +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+
+with_pv %>%
+  ggplot(aes(pv, fill=phase)) +
+  # TODO: NOTE: Assumes distribution (normal?). Consider e.g. p4 from p4. Should be line/point.
+  geom_density(alpha=0.5, bw=2) +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(from ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Density')
+
+with_pv %>%
+  ggplot(aes(pv, fill=from, color=from)) +
+  geom_histogram(binwidth=2, alpha=0.5, position='identity') +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(phase ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Frequency')
+
+with_pv %>%
+  ggplot(aes(pv, fill=phase, color=phase)) +
+  geom_histogram(binwidth=2, alpha=0.5, position='identity') +
+  ggtitle('PV (present value) from the perspective of different phases') +
+  facet_grid(from ~ ., scales='free_y') +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  xlab('PV (million USD)') + ylab('Frequency')
+
+
+# ==================================
+# Means
+# ==================================
 
 # Transform: PV means per view
 phases_from_phases_summary <- phases_from_phases %>% group_by(phase, from) %>%
