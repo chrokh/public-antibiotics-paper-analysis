@@ -1,0 +1,1057 @@
+---
+title: Time for public pharma?
+subtitle: Supplementary material
+author: Christopher Okhravi
+date: 2019
+output:
+  html_document:
+    toc: true
+    #toc_float:
+    #  collapsed: false
+    theme: cosmo
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
+```
+
+```{r, libraries, include=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+# Introduction
+This document serves as supplementary material for the paper "Time for public pharma?".
+This is a monte carlo simulation that explores direct versus indirect funding of antibiotics research and development (R&D).
+Direct funding is here used to mean that a benefactor pays for antibiotics R&D at cost.
+Indirect funding is here used to mean that a benefactor issues non-dilutive prizes to whoever completes a particular phase, with the intent of incentivizing private developers to undertake said and prior phases.
+This analysis is attempting to estimate which of the two options would be cheaper, ceteris paribus, for the benefactor.
+
+# Simulation and input data set
+
+Let us begin by setting `N` to the number of samples that we want per data set.
+This number represents the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
+The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
+Meaning that if one considers all the data sets at once then the number of random projects drawn is `N` multiplied with the number of data sets.
+
+```{r}
+N = 1000
+```
+
+## Sertkaya et. al (2014)
+
+We are currently using only a single data set, namely Sertkaya et. al (2014).
+This is an approximation of their data set as they make a few assumptions that are not reconcilable with the way we have chosen to model antibiotics R&D.
+The points of differentiation are outlined as comments in the code chunk below.
+
+<div class="alert alert-danger">
+**Sertkaya uses triangular distributions, but we have used uniform distributions. This must be changed.**
+</div>
+
+```{r, simulate-sertkaya}
+# Same across all phases
+discount_rate <- runif(N, 0.09, 0.24)
+
+# Samples phases
+pc <- data.frame(subject=1:N, phase=factor('PC'))
+pc$time             <- runif(N, min=4.3, max=6)
+pc$cost             <- runif(N, min=19, max=23.2)
+pc$sales            <- rep(0, N)
+pc$prizes           <- rep(0, N)
+pc$prob             <- runif(N, min=0.175, max=0.69)
+pc$discount_rate    <- discount_rate
+p1 <- data.frame(subject=1:N, phase=factor('P1'))
+p1$time             <- runif(N, min=0.75, max=1.8)
+p1$prob             <- runif(N, min=0.25, max=0.837)
+p1$cost             <- runif(N, min=7.3, max=12)
+p1$sales            <- rep(0, N)
+p1$prizes           <- rep(0, N)
+p1$discount_rate    <- discount_rate
+p2 <- data.frame(subject=1:N, phase=factor('P2'))
+p2$time             <- runif(N, min=0.75, max=2.5)
+p2$sales            <- rep(0, N)
+p2$prizes           <- rep(0, N)
+p2$cost             <- runif(N, min=7.12, max=18.72)
+p2$prob             <- runif(N, min=0.34, max=0.74)
+p2$discount_rate    <- discount_rate
+p3 <- data.frame(subject=1:N, phase=factor('P3'))
+p3$cost             <- runif(N, min=26.88, max=121.68)
+p3$prob             <- runif(N, min=0.314, max=0.786)
+p3$time             <- runif(N, min=0.83, max=3.9)
+p3$sales            <- rep(0, N)
+p3$prizes           <- rep(0, N)
+p3$discount_rate    <- discount_rate
+p4 <- data.frame(subject=1:N, phase=factor('P4'))
+p4$time             <- runif(N, min=0.5, max=1.04)
+p4$prob             <- runif(N, min=0.83, max=0.99)
+p4$cost             <- rep(98.297168, N)
+p4$sales            <- rep(0, N)
+p4$prizes           <- rep(0, N)
+p4$discount_rate    <- discount_rate
+mp <- data.frame(subject=1:N, phase=factor('MP'))
+mp$prob          <- 1
+mp$cost          <- 0
+mp$sales         <- runif(N, min=218, max=2500)
+mp$prizes        <- 0
+mp$time          <- 10
+mp$discount_rate <- discount_rate
+
+# Combine all phases into single dataset
+sertkaya2014 <- rbind(pc, p1, p2, p3, p4, mp)
+
+# Set source name
+sertkaya2014$src <- 'Sertkaya et. al (2014)'
+```
+
+
+## Combining all datasets
+Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
+
+```{r}
+phases <- rbind(sertkaya2014)
+```
+
+```{r, include=FALSE}
+# To avoid recomputing all the time we'll also store the names of the different sources.
+sources <- unique(phases$src)
+```
+
+<div class="alert alert-danger">
+**We're currently only using a single data set.**
+</div>
+
+We must also convert `phase` into an ordered factor so that we can assume that `PC < P1 < P2 < P3 < P4 < MP`.
+
+```{r}
+phase_names <- c('PC','P1','P2','P3','P4','MP')
+phase_levels <- factor(phase_names, levels=phase_names, ordered=TRUE)
+phases$phase <- factor(phases$phase, levels=phase_names, ordered=TRUE)
+```
+
+Later we will apply interventions to this dataset and thereby create multiple permutations/versions of every observation.
+This means that we must keep track of which intervention we're currently looking at, and as such we'll add that column immediately, and declare all the current data as suffering from "no intervention".
+In terms of a randomized controlled trial, an intervention can be thought of as a "treatment".
+
+```{r}
+phases$intervention <- 'NONE'
+```
+
+
+## Summary statistics
+Let us plot the phase parameters as histograms for each of the sources.
+
+```{r, summary-phases, echo=FALSE, warning=FALSE, message=FALSE}
+for (curr in sources) {
+  sub <- filter(phases, src == curr)
+  p1 <- ggplot(sub, aes(cost, fill=phase)) +
+    geom_histogram() +
+    facet_grid(phase ~ ., scale='free_y') +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          panel.grid.minor.y=element_blank(),
+          panel.grid.major.y=element_blank(),
+          legend.position='none') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    xlab('Cost (million USD)')
+  p2 <- ggplot(sub, aes(sales, fill=phase)) +
+    geom_histogram() +
+    facet_grid(phase ~ ., scale='free_y') +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          panel.grid.minor.y=element_blank(),
+          panel.grid.major.y=element_blank(),
+          legend.position='none') +
+    xlab('Sales (million USD)')
+  p5 <- ggplot(sub, aes(prizes, fill=phase)) +
+    geom_histogram() +
+    facet_grid(phase ~ ., scale='free_y') +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          panel.grid.minor.y=element_blank(),
+          panel.grid.major.y=element_blank(),
+          legend.position='none') +
+    xlab('Grants (million USD)')
+  p3 <- ggplot(sub, aes(prob*100, fill=phase)) +
+    geom_histogram() +
+    facet_grid(phase ~ ., scale='free_y') +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          panel.grid.minor.y=element_blank(),
+          panel.grid.major.y=element_blank(),
+          legend.position='none') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    xlab('Probability (%)')
+  p4 <- ggplot(sub, aes(time, fill=phase)) +
+    geom_histogram() +
+    facet_grid(phase ~ ., scale='free_y') +
+    theme(axis.title.y=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          panel.grid.minor.y=element_blank(),
+          panel.grid.major.y=element_blank(),
+          legend.position='none') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    xlab('Duration (months)')
+  grid.arrange(p1, p2, p3, p4, p5, ncol=3, top=curr)
+}
+```
+
+Interestingly, some parameters are quite dispersly distributed between phases.
+Consider e.g. how almost all of the cost is incurred in some phase(s) while all the time is spent in another.
+The two following figures plot what percentage of the total of some property is spent in a given phase, per project.
+The first plot is grouped by property, while the second by phase.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Transform: phase properties to long from wide
+phase_props <- sub %>%
+  filter(phase != 'MP') %>%
+  select(-intervention, -discount_rate) %>%
+  gather(key='prop', value='value', -src, -subject, -phase) %>%
+  group_by(src, subject, prop) %>%
+  mutate(total = sum(value),
+         ratio = value / total) # NOTE: will cause NaN if 0/0
+
+for (curr in sources) {
+  p1 <- phase_props %>%
+    filter(src == curr) %>%
+    filter(!is.na(ratio)) %>%
+    ggplot(aes(x=phase,y=ratio*100, fill=phase)) +
+    geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
+    facet_grid(~ prop) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1),
+          axis.ticks.x=element_blank()) +
+      ylab('% of property in phase') + xlab('') +
+      guides(fill = FALSE)
+
+  p2 <- phase_props %>%
+    filter(src == curr) %>%
+    ggplot(aes(x=prop,y=ratio*100, fill=prop)) +
+    geom_violin(draw_quantiles=c(0.25, 0.5, 0.75)) +
+    facet_grid(~ phase) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1),
+          axis.ticks.x=element_blank()) +
+        ylab('% of property in phase') + xlab('') +
+        guides(fill = FALSE)
+}
+
+grid.arrange(p1, p2, ncol=1, top=curr)
+```
+
+Computing and plotting the mean value perhaps tells the same story a bit more simply.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+for (curr in sources) {
+  phase_props_summary <- phase_props %>%
+    filter(src == curr) %>%
+    group_by(phase, prop) %>%
+    summarise(ratio.mean = mean(ratio))
+
+  p1 <- ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+    geom_bar(stat='identity', aes(fill=phase), position='dodge') +
+    ylab('Mean % of property in phase') +
+    guides(fill = FALSE) +
+    theme(axis.title.y=element_blank(), axis.title.x=element_blank())
+
+  p2 <- ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=prop, y=ratio.mean * 100)) +
+    geom_bar(stat='identity', aes(fill=phase), position='stack') +
+    labs(fill='') +
+    theme(axis.title.y=element_blank(), axis.title.x=element_blank())
+
+  p3 <- ggplot(filter(phase_props_summary, is.finite(ratio.mean)), aes(x=phase, y=ratio.mean * 100)) +
+    geom_bar(stat='identity', aes(fill=prop), position='dodge') +
+    labs(fill='') +
+    ylab('Mean % of property in phase') +
+    theme(axis.title.y=element_blank(), axis.title.x=element_blank())
+
+  grid.arrange(p2, p3, ncol=2, top=curr)
+}
+```
+
+
+
+# Valuation metrics
+We employ the following financial metrics for cashflows:
+
+- Non-capitalized value / Out-of-pocket value
+- Risk-adjusted value (rV) / Expected value (EV)
+- Capitalized value / Present value (PV)
+- Risk-adjusted present value (rPV) / Expected present value (EPV)
+
+Symmetrically, when cumulating cashflows, the above financial metrics are known as:
+
+- Cumulative non-capitalized value / Cumulative out-of-pocket value
+- Cumulative risk-adjusted value (Cumulative rV) / Cumulative expected value (Cumulative EV)
+- Net present value (NPV)
+- Risk-adjusted net present value (rNPV) / Expected net present value (ENPV)
+
+We compute **Expected Value (EV)** as:
+
+$$
+EV_t = (R_t - C_t) * P_t
+$$
+
+where $R_t$ and $C_t$ are the revenues and costs (respectively) at time $t$, and $P_t$ the probability of reaching the cashflow from the point of evaluation.
+The probability of reaching a given timestep $t_n$ from a point of evaluation $t_0$ is simply computed as: $P_t = \prod_{t_0}^{t^n}$.
+Next, we compute **Present Value (PV)** as:
+
+$$
+\mathit{PV}_t = \frac{R_t - C_t}{(1 + i)^t}
+$$
+
+where $i$ is the discount rate of the evaluator, and $t$ is the time to the phase from the point of evaluation.
+We compute **Expected Present Value (EPV)** as:
+
+$$
+\mathit{EPV}_t = \frac{R_t - C_t}{(1 + i)^t} * P_t
+$$
+
+Moving on to the cumulative valuations, we compute **Net Expected Value (ENV)**, **Net Present Value (NPV)**, and **Expected Net Present Value (ENPV)** as:
+$\sum_{t\in T} \mathit{EV}_t$
+
+$$
+\mathit{ENV_T} = \sum_{t\in T} EV_t\\
+\mathit{NPV_T} = \sum_{t\in T} \mathit{PV}_t\\
+\mathit{ENPV_T} = \sum_{t\in T} \mathit{EPV}_t\\
+$$
+
+respectively, where $t$ is the time to the phase, and $T$ is the times to all timesteps of all phases for the project in evaluation.
+
+<div class="alert alert-danger">
+TODO: Verify that the probability portion of ENPV is actually computed accordingly!
+</div>
+
+
+# Valuation methods
+To compute valuation metrics for a given project we must make an assumption as to how a hypothetical evaluator chooses to transform a sequence of discrete phases into a sequence of discrete and uncertain cashflows.
+We make the assumption that the evaluator converts every phase into a series of years in order to properly discount the cashflow of the given phase.
+This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.s when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
+To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
+
+
+## Phase-based method
+
+As phase durations are long, the time value of money not only greatly reduces the attractiveness of revenues, but also dampen the pain of costs.
+If we disregard the fact that some phases (such as e.g. pre-clinical) are lengthy, and assume that the cashflows related to a phase all happen immediately upon entry into the phase, we can trivially compute Expected Value (EV), Present Value (PV), and Expected Present Value (EPV) of all phases from the perspective of all phases.
+We can then cumulate these metrics in order to, respectively, compute cumulative EV, Net Present Value (NPV), and Expected Net Present Value (ENPV) from any phase to any phase.
+We compute the above like this:
+
+```{r}
+phase_based_valuation <- function(phases) {
+  result <- tibble()
+  for (from in phase_levels) {
+    rows <- phases %>%
+      filter(phase >= from) %>%
+      group_by(src, intervention, subject) %>%
+      arrange(src, intervention, subject, phase) %>%
+      mutate(from = factor(from, levels=phase_names, ordered=TRUE),
+             time_to = cumsum(time) - time,
+             cum_prob = cumprod(prob),
+             prob_to = cum_prob / prob,
+             # cashflows
+             cashflow = sales + prizes - cost,
+             ev = cashflow * prob_to,
+             pv = cashflow / ((1 + discount_rate) ^ time_to),
+             epv = pv * prob_to,
+             # cumulatives
+             cum_cashflow = cumsum(cashflow),
+             env = cumsum(ev),
+             npv = cumsum(pv),
+             enpv = cumsum(epv),
+      )
+      result <- bind_rows(result, rows)
+  }
+  result
+}
+```
+
+```{r}
+phases_from_phases <- phase_based_valuation(phases)
+```
+
+Let us first plot the valuation of each individual phase from the perspective of pre-clinical.
+
+<div class="alert alert-danger">
+TODO: In the plots below we're ignoring the value at the market since it dwarfs all other values as a consequence of being an immediate lump-sum. Split the market years into M1-M10 for both approaches so that we can plot the market here as well. This is very important as it gives a wildly incorrect valuation.
+</div>
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  for (ph in c('PC')) {
+    sub <- filter(phases_from_phases,
+                  from == ph & src == curr & phase != 'MP')
+    p1 <- ggplot(sub, aes(phase, cashflow)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('Cashflow') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p2 <- ggplot(sub, aes(phase, ev)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('EV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p3 <- ggplot(sub, aes(phase, pv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('PV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p4 <- ggplot(sub, aes(phase, epv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('EPV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    grid.arrange(p1, p2, p3, p4, nrow=2, top=curr)
+  }
+}
+```
+
+Let us now plot the cumulative value at each individual phase using pre-clinical as the starting point.
+
+<div class="alert alert-danger">
+TODO: In the plots below we're ignoring the value at the market since it dwarfs all other values as a consequence of being an immediate lump-sum. Split the market years into M1-M10 for both approaches so that we can plot the market here as well. This is very important as it gives a wildly incorrect valuation.
+</div>
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  for (ph in c('PC')) {
+    sub <- filter(phases_from_phases,
+                  from == ph & src == curr & phase != 'MP')
+    p1 <- ggplot(sub, aes(phase, cum_cashflow)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('Cumulative cashflow') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p2 <- ggplot(sub, aes(phase, env)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('ENV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p3 <- ggplot(sub, aes(phase, npv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('NPV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p4 <- ggplot(sub, aes(phase, enpv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('ENPV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    grid.arrange(p1, p2, p3, p4, nrow=2, top=curr)
+  }
+}
+```
+
+Another way to look at the data is to consider how starting at different phases alter the value of the project.
+We simply compute it as follows:
+
+```{r}
+# TODO: Make sure this is a correct calculation!
+final_value_phasewise <- phases_from_phases %>%
+  group_by(src, subject, from) %>%
+  filter(phase == max(phase)) %>%
+  summarise(cum = tail(cum_cashflow, n=1),
+            env = tail(env, n=1),
+            npv = tail(npv, n=1),
+            enpv = tail(enpv, n=1))
+
+final_value_phasewise_long <- final_value_phasewise %>%
+  gather('valuation', 'value', cum, env, npv, enpv)
+
+final_value_phasewise_long_summary <- final_value_phasewise_long %>%
+  group_by(src, from, valuation) %>%
+  summarize(median = median(value),
+            mean = mean(value),
+            sd   = sd(value),
+            min  = min(value),
+            max  = max(value))
+```
+
+We begin by plotting the mean value of bringing the project to completion from whatever starting phase we're currently considering.
+Using the four metrics previously applied.
+The vertical lines delimit +/- 1 standard deviation from the sample mean.
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  pos <- position_dodge(0.2)
+  print(final_value_phasewise_long_summary %>%
+        filter(src == curr) %>%
+        ggplot(aes(from, mean, color=valuation, group=valuation)) +
+        geom_linerange(aes(ymin=mean-sd, ymax=mean+sd), position=pos, size=1) +
+        geom_line(position=pos, size=1, linetype='dotted') +
+        geom_point(position=pos, size=2) +
+        scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+        xlab(element_blank()) + ylab(element_blank()) +
+        ggtitle(curr))
+  # ALTERNATIVE:
+  # final_value_phasewise_long %>%
+  #   filter(from != 'MP' & src == curr) %>%
+  #   ggplot(aes(from, value, fill=valuation)) +
+  #   geom_boxplot()
+}
+```
+
+The table below summarizes the valuation metrics from the start of pre-clinical.
+
+```{r, echo=FALSE}
+sub <- final_value_phasewise_long_summary %>%
+  ungroup %>%
+  filter(from=='PC') %>%
+  select(-from)
+knitr::kable(sub)
+```
+
+## Year-based method
+To consider the fact that all cashflows of a phase do not occur immediately upon phase-entry we convert our phase-based data to year-based data and make assumptions as to how the values are interpolated over the years of a phase.
+
+We assume that all properties are constantly distributed over the time of the phase except for revenues.
+We assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total revenues of the phase.
+The first year will thus be non-zero if the total revenues of the project is non-zero.
+
+We use the following function to convert from phase-form to year-form:
+
+```{r, results='hide'}
+#' Converts a data set in phase-form to year-form.
+#'
+#' @param phases Dataframe in phase-form.
+#' @return Dataframe in year-form
+to_years <- function (phases) {
+
+  # Convert phases to ordered factor
+  phases$phase <- factor(phases$phase, levels=phase_levels, ordered=TRUE)
+
+  # Add timestamps to every observation
+  phases <- phases %>%
+    group_by(src, intervention, subject) %>%
+    arrange(src, intervention, subject, phase) %>%
+    mutate(t = cumsum(time) - time)
+
+  # Compute cost steps
+  phases$cost_step <- (phases$cost / phases$time)
+  phases$cost_remainder <- phases$cost - phases$cost_step * floor(phases$time)
+
+  # Compute prob steps
+  phases$prob_step <- phases$prob ^ (1 / phases$time)
+  phases$prob_remainder <- phases$prob / (phases$prob_step ^ floor(phases$time))
+
+  # Compute sales slopes
+  phases$sales_slope <- (phases$sales * 2 / (phases$time + 1)) / phases$time
+
+  # Transform: To cashflows over time (phase yearly)
+  phase_years <- tibble()
+  for (x in 1:ceiling(max(phases$time) + 1)) {
+
+    # Compute step-based properties
+    whole_step <- x <= phases$time
+    cost <- ifelse(whole_step, phases$cost_step, phases$cost_remainder)
+    sales <- ifelse(whole_step, phases$sales_slope * x, 0)
+    prob <- ifelse(whole_step, phases$prob_step, phases$prob_remainder)
+    prizes <- if (x == 1) phases$prizes else 0 # Immediate lump-sum
+
+    # Make tibble
+    has_decimals <- phases$time - floor(phases$time) != 0
+    part_of_phase <- x <= phases$time | (x <= phases$time + 1 & has_decimals)
+    year <- tibble(part_of_phase,
+                   src = phases$src,
+                   intervention = phases$intervention,
+                   subject = phases$subject,
+                   phase_year = x,
+                   t = phases$t + x - 1,
+                   phase = phases$phase,
+                   cost,
+                   sales,
+                   prizes,
+                   prob,
+                   time = phases$time,
+                   discount_rate = phases$discount_rate
+                   ) %>%
+    filter(x <= time | (x <= time + 1 & has_decimals)) %>% # Only years in phase
+    select(-c('part_of_phase')) # Remove temporary column
+
+    # Append
+    phase_years <- bind_rows(phase_years, year)
+  }
+
+  phase_years
+}
+```
+
+Using this function we can now convert our phase-based data to year-based data.
+It should be noted that the function does not distribute the phase-based data over a series of equidistant years.
+Data points are only equidistant within a phase, but not necessarily across.
+In other words, if P1 entry would occur after 5.3 years then we will distribute PC properties over the 6 first years.
+If the duration of P1 is 2.5 years then P2 would start at year 5.3 and end at year 7.8.
+While we would divide P1 into three equidistant (years) points (years), that start from year 5.3, 6.3, and 7.3 (respectively) they are not equidistant from the PC steps.
+
+```{r}
+years <- to_years(phases)
+```
+
+Before we start introducing interventions, let us first do some descriptive statistics of our year-based datasets.
+
+Let us begin by looking at the cashflows using a few different valuation techniques.
+From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
+
+```{r, include=FALSE}
+# TODO: Maybe this code should be included? At least explained!
+# Transform: Phase years from different phases
+years_from_phases <- tibble()
+for (from in phase_levels) {
+  pyfp <- years %>%
+    filter(phase >= from) %>%
+    group_by(src, subject, intervention) %>%
+    arrange(t) %>%
+    mutate(from          = factor(from, levels=phase_levels, ordered=TRUE),
+           time_to       = t - min(t),
+           cashflow      = sales + prizes - cost,
+           revenue       = sales + prizes,
+           cum_cost      = cumsum(cost),
+           cum_revenue   = cumsum(revenue),
+           cum_cashflow  = cum_revenue - cum_cost,
+           rem_prob      = prod(prob) / cumprod(prob) * prob,
+           cum_prob      = cumprod(prob),
+           prob_to       = cum_prob / prob,
+           # cost
+           cost_ev         = cost * prob_to, # TODO:ok?
+           cost_env     = cumsum(cost_ev),
+           cost_pv         = cost / ((1 + discount_rate) ^ time_to),
+           cost_epv        = (cost / ((1 + discount_rate) ^ time_to)) * prob_to,
+           cost_npv        = cumsum(cost_pv),
+           cost_enpv       = cumsum(cost_epv), # TODO:ok?
+           # revenue
+           revenue_ev      = revenue * prob_to, # TODO:ok?
+           revenue_env  = cumsum(revenue_ev),
+           revenue_pv      = revenue / ((1 + discount_rate) ^ time_to),
+           revenue_epv     = (revenue / ((1 + discount_rate) ^ time_to)) * prob_to,
+           revenue_npv     = cumsum(revenue_pv),
+           revenue_enpv    = cumsum(revenue_epv), # TODO:ok?
+           # cashflow
+           cashflow_ev     = revenue_ev - cost_ev,
+           cashflow_env = revenue_env - cost_env,
+           cashflow_pv     = revenue_pv - cost_pv,
+           cashflow_epv    = revenue_epv - cost_epv,
+           cashflow_npv    = revenue_npv - cost_npv,
+           cashflow_enpv   = revenue_enpv - cost_enpv,
+           # year
+           year            = floor(time_to)
+           )
+  years_from_phases <- bind_rows(years_from_phases, pyfp)
+}
+```
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  for (ph in c('PC')) {
+    sub <- filter(years_from_phases, from == ph & src == curr)
+    p1 <- ggplot(sub, aes(as.factor(year), cashflow)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('Not capitalized') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p2 <- ggplot(sub, aes(as.factor(year), cashflow_ev)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('EV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p3 <- ggplot(sub, aes(as.factor(year), cashflow_pv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('PV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    p4 <- ggplot(sub, aes(as.factor(year), cashflow_epv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('EPV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#f8766d')
+    grid.arrange(p1, p2, p3, p4, nrow=2, top=curr)
+  }
+}
+```
+
+If we cumulate these values over time, we get the cumulative versions of these metrics.
+These can be thought of as the value of running the project for x years from the start.
+From top-left to bottom right: cumulative out-of-pocket cashflows, cumulative risk-adjusted/expected value (EV), capitalized/net present value (NPV), and risk-adjusted/expected capitalized/net present value (ENPV).
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  for (ph in c('PC')) {
+    sub <- filter(years_from_phases, from == ph & src == curr)
+    p5 <- ggplot(sub, aes(as.factor(year), cum_cashflow)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('Not capitalized') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p6 <- ggplot(sub, aes(as.factor(year), cashflow_env)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('Cumulative EV') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p7 <- ggplot(sub, aes(as.factor(year), cashflow_npv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('NPV (cumulative PV)') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    p8 <- ggplot(sub, aes(as.factor(year), cashflow_enpv)) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+      ggtitle('ENPV (cumulative EPV)') +
+      xlab(element_blank()) + ylab(element_blank()) +
+      geom_boxplot(fill='#00bfc4')
+    grid.arrange(p5, p6, p7, p8, nrow=2, top=curr)
+  }
+}
+```
+
+Another way to look at the data is to consider how starting at different phases alter the value of the project.
+We begin by plotting the mean value of bringing the project to completion from whatever starting phase we're currently considering.
+Using the four metrics previously applied.
+The vertical lines delimit +/- 1 standard deviation from the sample mean.
+
+```{r, include=FALSE}
+# TODO: Should be included somehow?
+# Summarize: phase years from phases
+years_from_phases_summary <- years_from_phases %>%
+  group_by(src, intervention, year, from) %>%
+  summarize(cum_mean  = mean(cum_cashflow),
+            env_mean  = mean(cashflow_env),
+            npv_mean  = mean(cashflow_npv),
+            enpv_mean = mean(cashflow_enpv))
+
+# Transform: Compute final year npv values (from phases)
+# TODO: Not sure if final year is NPV is becoming skewed by zero cashflow years
+# in the end. It seems to me that it shouldn't be a problem but: make some
+# calculations to ensure that this is definitely not a problem!
+final_year_from_phases <- years_from_phases %>%
+  group_by(src, subject, from) %>%
+  filter(year == max(year)) %>%
+  summarise(npv    = tail(cashflow_npv, n=1),
+            enpv   = tail(cashflow_enpv, n=1),
+            cum    = tail(cum_cashflow, n=1),
+            env = tail(cashflow_env, n=1),
+            )
+
+final_year_from_phases_long <- final_year_from_phases %>%
+  gather('valuation', 'value', cum, env, npv, enpv)
+
+final_year_from_phases_long_summary <- final_year_from_phases_long %>%
+  group_by(src, from, valuation) %>%
+  summarize(median = median(value),
+            mean = mean(value),
+            sd   = sd(value),
+            min  = min(value),
+            max  = max(value))
+```
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  pos <- position_dodge(0.2)
+  print(final_year_from_phases_long_summary %>%
+        filter(src == curr) %>%
+        ggplot(aes(from, mean, color=valuation, group=valuation)) +
+        geom_linerange(aes(ymin=mean-sd, ymax=mean+sd), position=pos, size=1) +
+        geom_line(position=pos, size=1, linetype='dotted') +
+        geom_point(position=pos, size=2) +
+        scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+        xlab(element_blank()) + ylab(element_blank()) +
+        ggtitle(curr))
+}
+```
+
+The table below summarizes the valuation metrics from the start of pre-clinical.
+
+```{r, echo=FALSE}
+sub <- final_year_from_phases_long_summary %>%
+  ungroup %>%
+  filter(from=='PC') %>%
+  select(-from)
+knitr::kable(sub)
+```
+
+## Comparing methods
+Let us compare the two methods by looking at the cumulative valuations from different starting points.
+
+```{r, echo=FALSE}
+pwise <- final_value_phasewise_long
+ywise <- final_year_from_phases_long
+pwise$method <- 'Phase-based'
+ywise$method <- 'Year-based'
+both <- bind_rows(pwise, ywise)
+for (src in sources) {
+  p <- both %>%
+    ggplot(aes(from, value, fill=method)) +
+    geom_boxplot() +
+    ylab(element_blank()) +
+    xlab(element_blank()) +
+    facet_wrap(valuation ~ ., ncol=2, scale='free_y') +
+    ggtitle(src)
+  print(p)
+}
+```
+
+Since ENPV and NPV are considerably higher at later stages it becomes difficult to read the actual values on the y-axis for earlier phases. Let us therefore also compare the value from pre-clinical only.
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  p <- both %>%
+    filter(src == curr & from == 'PC') %>%
+    ggplot(aes(method, value, fill=method)) +
+    geom_boxplot() +
+    ylab(element_blank()) +
+    xlab(element_blank()) +
+    facet_wrap(valuation ~ ., ncol=4, scale='free_y') +
+    theme(legend.position = 'none') +
+    ggtitle(src)
+  print(p)
+}
+```
+
+Evidently, the two simple valuation metrics cumulative cashflows and ENV, does not differ between the two methods.
+Let us for the sake of completness therefore also boxplot the two remaining methods (NPV and ENPV) from all phases.
+
+```{r, echo=FALSE}
+# TODO: Use the phrases valuation metric and valuation method to differentiate
+# whether we're talking about NPV/ENPV or phase-based/year-based.
+for (curr in sources) {
+  p <- both %>%
+    filter(src == curr) %>%
+    filter(valuation != 'cum' & valuation != 'env') %>%
+    ggplot(aes(method, value, fill=method)) +
+    geom_boxplot() +
+    #facet_grid(cols=vars(from), rows=vars(valuation), scales='free_y') +
+    facet_wrap(valuation ~ from, scales='free', ncol=6) +
+    ylab(element_blank()) +
+    xlab(element_blank()) +
+    theme(axis.text.x=element_blank(),
+          axis.ticks.x=element_blank()) +
+    ggtitle(src)
+  print(p)
+}
+```
+
+
+# Interventions
+We will now introduce five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
+We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of their actuation time.
+The intervention can be described as a non-dilutive and unconditional prize.
+This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
+We implement the intervention as a function `intervene` as follows:
+
+```{r}
+log10_sample <- function (min, max, magnitude_min, magnitude_max) {
+  runif(N, min, max) * (10 ^ runif(N, magnitude_min, magnitude_max))
+}
+
+intervene <- function (phases, target_phase, intervention_name) {
+  data.frame(phases) %>%
+    mutate(intervention = intervention_name,
+           prizes = ifelse(phase == target_phase,
+                           log10_sample(1, 9, 1, 3),
+                           prizes))
+}
+```
+
+We can then treat copies of the original phase-based data set and merge it into one larger data set, like this:
+
+```{r}
+intervened <- rbind(phases,
+  intervene(phases, 'P1', 'P1ER'),
+  intervene(phases, 'P2', 'P2ER'),
+  intervene(phases, 'P3', 'P3ER'),
+  intervene(phases, 'P4', 'P4ER'),
+  intervene(phases, 'MP', 'PDMER'))
+```
+
+Note that we are logarithmically sampling prize sizes.
+This is because we assume that the absolute difference in effect will be much smaller when prize sizes are very small, as compared to when prize sizes are very large, and hence need more samples at the "bottom" to properly saturate the space.
+In the analysis we at all times "control for" prizes which means that the chosen distribution does not affect any of the conclusions beyond sample saturation.
+The sampled prizes are summarized in the histogram below.
+
+```{r, echo=FALSE, message=FALSE}
+print(intervened %>%
+      filter(prizes > 0) %>%
+      ggplot(aes(prizes, fill=phase)) +
+      geom_histogram() +
+      theme(axis.title.y=element_blank()) +
+      facet_wrap(interaction(intervention, phase)~., ncol=3) +
+      guides(fill = FALSE))
+```
+
+
+# Analysis
+
+<div class="alert alert-danger">
+Insert description here.
+</div>
+
+```{r}
+valuations <-
+  to_years(intervened) %>%
+  rename(discount_rate_priv = discount_rate) %>%
+
+  # Add public discount rate
+  group_by(subject) %>%
+  mutate(discount_rate_publ = runif(1, min=0.035, max=0.045)) %>%
+  ungroup %>%
+
+  arrange(t) %>%
+  group_by(src, subject, intervention) %>%
+  mutate(
+         intervention_size = sum(prizes),
+         cashflow  = sales + prizes - cost,
+         prob_to   = cumprod(prob) / prob, # TODO: Is this correct?
+         enpv_priv = cumsum((cashflow / ((1 + discount_rate_priv) ^ t)) * prob_to),
+         enpv_publ = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         enpv_benf = cumsum((-prizes / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         ) %>%
+  select(-prob_to)
+
+finals <- valuations %>%
+  arrange(t) %>%
+  group_by(src, subject, intervention) %>%
+  summarise(
+         prizes    = sum(prizes),
+         enpv_priv = tail(enpv_priv, n=1),
+         enpv_publ = tail(enpv_publ, n=1),
+         enpv_benf = tail(enpv_benf, n=1)
+         )
+```
+
+```{r, include=FALSE}
+benf_higher <- filter(finals, enpv_benf > enpv_publ)
+```
+
+So the first question we may want to ask ourselves is whether there are any observations where the benefactor's full project ENPV is higher than the public's.
+The number of observations where the benefactor's ENPV is higher than that of the public's is `r nrow(benf_higher)` of `r nrow(finals)` so about `r round(nrow(benf_higher)/nrow(finals), 3)`%.
+This means that it is not always preferable for the public benefactor to pay for antibiotics R&D at cost, nor is it always preferable to issue prizes.
+Consequently we must explore what conditions cause one to be preferable over the other.
+
+
+## Prizes and private ENPV
+Let us first ensure that the prizes we have issued (i.e. the interventions) actually do have an effect on private ENPV.
+As such there should be a correlation between prize size and developer's ENPV.
+
+```{r, echo=FALSE}
+for (curr in sources) {
+  print(finals %>%
+    filter(src == curr & intervention != 'NONE') %>%
+    ggplot(aes(prizes, enpv_priv, color=intervention)) +
+    geom_point() +
+    geom_smooth(method='lm', se=FALSE, color='black') +
+    facet_wrap(. ~ intervention, ncol=3) +
+    #coord_cartesian(xlim = c(0, 3000), ylim = c(-25, 20000)) +
+    xlab('Prize') +
+    ylab('Private ENPV') +
+    theme(legend.position = 'none') +
+    ggtitle(curr)
+  )
+}
+
+print(finals %>%
+  filter(intervention != 'NONE') %>%
+  ggplot(aes(prizes, enpv_priv, color=intervention)) +
+  geom_smooth(method='lm', se=FALSE) +
+  #geom_point(alpha=0.5) +
+  facet_wrap(. ~ src, ncol=3) +
+  #coord_cartesian(xlim = c(0, 3000), ylim = c(-25, 20000)) +
+  xlab('Prize') +
+  ylab('Private ENPV')
+)
+```
+
+<div class="alert alert-danger">
+TODO: Add enpv improvement (y) by prizes (x) plot.
+</div>
+
+
+## Prizes and benefactor ENPV
+In order to gauge the actual cost of how much a benefactor will have to pay when issuing a particular prize, we choose to compute ENPV.
+This metric takes both the opportunity cost (cost of capital) and risk of a project into consideration.
+Taking opportunity cost into consideration is important as the benefactor looses the opportunity to activate their money elsewhere when making a payment to a beneficiary.
+Taking risk into consideration is important as the benefactor will not necessarily pay the promised prize size, due to projects being highly risky.
+We will now explore the correlation between prize size and the negative ENPV for the benefactor.
+Note that ENPV for the benefactor necessarily will be negative as the prize payout is the only cashflow considered.
+
+```{r, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, -enpv_benf, color=intervention)) +
+  geom_point() +
+  geom_smooth(method='lm', se=FALSE) +
+  facet_wrap(. ~ src, ncol=3) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:3)),
+                     minor_breaks = c(1:9 %o% 10^(0:3))) +
+  xlab('Prize (log)') + ylab('-Benefactor ENPV')
+```
+
+## Benefactor ENPV and Private ENPV
+How much it costs the benefactor compared to how much it benefits the beneficiary.
+
+```{r, echo=FALSE}
+ggplot(finals, aes(y=enpv_priv, x=-enpv_benf, color=intervention)) +
+  geom_point() +
+  facet_wrap(. ~ src, ncol=3) +
+  geom_smooth(method='lm', se=FALSE) +
+  coord_cartesian(xlim = c(0, 500), ylim = c(-25, 200)) +
+  ylab('Private ENPV') + xlab('-Benefactor ENPV')
+```
+
+## Prizes and go-decisions
+Assuming that a go-decision is reached in pre-clinical whenever private ENPV is greater than or equal to 0, we can use logistic regression to predict whether a particular prize size will yield a go or no-go decision.
+We first compute go-decisions:
+```{r}
+finals$go <- factor(finals$enpv_priv >= 0, levels=c(TRUE, FALSE))
+```
+
+then construct the model and use it to predict values as follows:
+```{r}
+prize_model <- glm(data = finals,
+             go ~ prizes * interaction(src, intervention),
+             family = binomial(link='logit'))
+finals$pred_go_prize <- predict(prize_model, type='response')
+```
+
+Finally, we can plot the predicted decision against different prize sizes.
+```{r, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, (1-pred_go_prize)*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+      xlab('Prize (log)') + ylab('Probability of go-decision') +
+      facet_wrap(. ~ src, ncol=3)
+```
+
+
+## Benefactor ENPV and go-decisions
+In the same fashion, we can construct a model that predicts go-decisions from the benefactor's ENPV.
+
+```{r}
+benf_model <- glm(data=finals,
+             go ~ enpv_benf * interaction(src, intervention),
+             family=binomial(link='logit'))
+finals$pred_go_benf <- predict(benf_model, type='response')
+```
+
+This can help us understand how much the benefactor will have to spend in order to achieve a particular go-decision probability.
+```{r, echo=FALSE}
+finals %>%
+  ggplot(aes(-enpv_benf, (1-pred_go_benf)*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+      xlab('-Benefactor ENPV (log)') + ylab('Probability of go-decision') +
+      facet_wrap(. ~ src, ncol=3)
+```
+
+# Conclusion
