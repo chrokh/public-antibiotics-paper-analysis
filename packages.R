@@ -5,9 +5,9 @@ options(repos = r)
 install.packages('tidyr')
 install.packages('ggplot2')
 install.packages('gridExtra')
+install.packages('triangle')
 install.packages('remotes')
 remotes::install_github('rstudio/rmarkdown')
-
 
 install.packages('bindrcpp')
 # Solves:

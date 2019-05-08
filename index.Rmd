@@ -23,6 +23,7 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(gridExtra)
+library(triangle)
 ```
 
 # Introduction
@@ -45,15 +46,14 @@ N = 1000
 
 ## Sertkaya et. al (2014)
 
-We are currently using only a single data set, namely Sertkaya et. al (2014).
-This is an approximation of their data set as they make a few assumptions that are not reconcilable with the way we have chosen to model antibiotics R&D.
+The following is an approximation of the data used by Sertkaya et. al (2014) as they make a few assumptions that are not reconcilable with the way we have chosen to model antibiotics R&D.
 The points of differentiation are outlined as comments in the code chunk below.
 
 <div class="alert alert-danger">
 **Sertkaya uses triangular distributions, but we have used uniform distributions. This must be changed.**
 </div>
 
-```{r, simulate-sertkaya}
+```{r}
 # Same across all phases
 discount_rate <- runif(N, 0.09, 0.24)
 
@@ -108,22 +108,74 @@ sertkaya2014 <- rbind(pc, p1, p2, p3, p4, mp)
 sertkaya2014$src <- 'Sertkaya et. al (2014)'
 ```
 
+## DRIVE-AB (2018)
+This is an approximation of the data used in DRIVE-AB final report (2018).
+Some deviations (reported as comments in the code chunk below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
+
+```{r}
+discount_rate <- runif(N, 0.05, 0.30) # Same across phases
+pc <- data.frame(subject=1:N, phase=factor('PC'))
+pc$time          <- rtriangle(N, 4.33, 6, 5.5)
+pc$cost          <- rtriangle(N, 14.25, 29, 21.1)
+pc$sales         <- 0
+pc$prizes        <- 0
+pc$prob          <- rtriangle(N, 0.175, 0.69, 0.352)
+pc$discount_rate <- discount_rate
+p1 <- data.frame(subject=1:N, phase=factor('P1'))
+p1$time          <- rtriangle(N, 0.75, 1.8, 0.875)
+p1$prob          <- rtriangle(N, 0.25, 0.837, 0.33)
+p1$cost          <- rtriangle(N, 13.1, 37.96, 24)
+p1$sales         <- 0
+p1$prizes        <- 0
+p1$discount_rate <- discount_rate
+p2 <- data.frame(subject=1:N, phase=factor('P2'))
+p2$time          <- rtriangle(N, 0.75, 2.5, 1.08)
+p2$sales         <- 0
+p2$prizes        <- 0
+# TODO: Below cost is incorrectly reported in DRIVE-AB report!
+p2$cost          <- rtriangle(N, 4.55, 46.36, 12.95)
+p2$sales         <- 0
+p2$prizes        <- 0
+p2$prob          <- rtriangle(N, 0.34, 0.74, 0.5)
+p2$discount_rate <- discount_rate
+p3 <- data.frame(subject=1:N, phase=factor('P3'))
+p3$time          <- rtriangle(N, 0.83, 3.83, 1.82)
+p3$cost          <- rtriangle(N, 10, 47, 21.8)
+p3$prob          <- rtriangle(N, 0.314, 0.786, 0.67)
+p3$sales         <- 0
+p3$prizes        <- 0
+p3$discount_rate <- discount_rate
+p4 <- data.frame(subject=1:N, phase=factor('P4'))
+p4$time          <- rtriangle(N, 0.5, 1.04, 0.75)
+p4$prob          <- rtriangle(N, 0.83, 0.99, 0.85)
+p4$cost          <- rtriangle(N, 55.5, 127.91, 88.35)
+p4$sales         <- 0
+p4$prizes        <- 0
+p4$discount_rate <- discount_rate
+mp <- data.frame(subject=1:N, phase=factor('MP'))
+mp$prob          <- 1
+mp$cost          <- 0
+mp$sales         <- rtriangle(N, 0, 4336.00, 2559.5) # TODO: Does not model
+# DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
+mp$prizes        <- 0
+mp$time          <- 10
+mp$discount_rate <- discount_rate
+driveab2018 <- rbind(pc, p1, p2, p3, p4, mp) # Combine phases
+driveab2018$src <- 'DRIVE-AB (2018)' # Set source
+```
+
 
 ## Combining all datasets
 Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
 
 ```{r}
-phases <- rbind(sertkaya2014)
+phases <- rbind(sertkaya2014, driveab2018)
 ```
 
 ```{r, include=FALSE}
 # To avoid recomputing all the time we'll also store the names of the different sources.
 sources <- unique(phases$src)
 ```
-
-<div class="alert alert-danger">
-**We're currently only using a single data set.**
-</div>
 
 We must also convert `phase` into an ordered factor so that we can assume that `PC < P1 < P2 < P3 < P4 < MP`.
 
@@ -212,7 +264,7 @@ The first plot is grouped by property, while the second by phase.
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
 # Transform: phase properties to long from wide
-phase_props <- sub %>%
+phase_props <- phases %>%
   filter(phase != 'MP') %>%
   select(-intervention, -discount_rate) %>%
   gather(key='prop', value='value', -src, -subject, -phase) %>%
@@ -241,9 +293,9 @@ for (curr in sources) {
           axis.ticks.x=element_blank()) +
         ylab('% of property in phase') + xlab('') +
         guides(fill = FALSE)
-}
 
-grid.arrange(p1, p2, ncol=1, top=curr)
+  grid.arrange(p1, p2, ncol=1, top=curr)
+}
 ```
 
 Computing and plotting the mean value perhaps tells the same story a bit more simply.
