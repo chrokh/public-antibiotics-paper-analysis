@@ -6,6 +6,7 @@ install.packages('tidyr')
 install.packages('ggplot2')
 install.packages('gridExtra')
 install.packages('triangle')
+install.packages('ggpubr')
 install.packages('remotes')
 remotes::install_github('rstudio/rmarkdown')
 
