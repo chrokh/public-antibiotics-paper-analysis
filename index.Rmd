@@ -67,21 +67,18 @@ discount_rate_priv <- runif(N, 0.09, 0.24)
 pc <- data.frame(subject=1:N, phase=factor('PC'))
 pc$time             <- runif(N, min=4.3, max=6)
 pc$cost             <- runif(N, min=19, max=23.2)
-pc$sales            <- rep(0, N)
-pc$prizes           <- rep(0, N)
+pc$sales            <- 0
 pc$prob             <- runif(N, min=0.175, max=0.69)
 pc$discount_rate_priv <- discount_rate_priv
 p1 <- data.frame(subject=1:N, phase=factor('P1'))
 p1$time             <- runif(N, min=0.75, max=1.8)
 p1$prob             <- runif(N, min=0.25, max=0.837)
 p1$cost             <- runif(N, min=7.3, max=12)
-p1$sales            <- rep(0, N)
-p1$prizes           <- rep(0, N)
+p1$sales            <- 0
 p1$discount_rate_priv <- discount_rate_priv
 p2 <- data.frame(subject=1:N, phase=factor('P2'))
 p2$time             <- runif(N, min=0.75, max=2.5)
-p2$sales            <- rep(0, N)
-p2$prizes           <- rep(0, N)
+p2$sales            <- 0
 p2$cost             <- runif(N, min=7.12, max=18.72)
 p2$prob             <- runif(N, min=0.34, max=0.74)
 p2$discount_rate_priv <- discount_rate_priv
@@ -89,21 +86,18 @@ p3 <- data.frame(subject=1:N, phase=factor('P3'))
 p3$cost             <- runif(N, min=26.88, max=121.68)
 p3$prob             <- runif(N, min=0.314, max=0.786)
 p3$time             <- runif(N, min=0.83, max=3.9)
-p3$sales            <- rep(0, N)
-p3$prizes           <- rep(0, N)
+p3$sales            <- 0
 p3$discount_rate_priv <- discount_rate_priv
 p4 <- data.frame(subject=1:N, phase=factor('P4'))
 p4$time             <- runif(N, min=0.5, max=1.04)
 p4$prob             <- runif(N, min=0.83, max=0.99)
-p4$cost             <- rep(98.297168, N)
-p4$sales            <- rep(0, N)
-p4$prizes           <- rep(0, N)
+p4$cost             <- 98.297168
+p4$sales            <- 0
 p4$discount_rate_priv <- discount_rate_priv
 mp <- data.frame(subject=1:N, phase=factor('MP'))
 mp$prob          <- 1
 mp$cost          <- 0
 mp$sales         <- runif(N, min=218, max=2500)
-mp$prizes        <- 0
 mp$time          <- 10
 mp$discount_rate_priv <- discount_rate_priv
 
@@ -124,7 +118,6 @@ pc <- data.frame(subject=1:N, phase=factor('PC'))
 pc$time          <- rtriangle(N, 4.33, 6, 5.5)
 pc$cost          <- rtriangle(N, 14.25, 29, 21.1)
 pc$sales         <- 0
-pc$prizes        <- 0
 pc$prob          <- rtriangle(N, 0.175, 0.69, 0.352)
 pc$discount_rate_priv <- discount_rate_priv
 p1 <- data.frame(subject=1:N, phase=factor('P1'))
@@ -132,16 +125,13 @@ p1$time          <- rtriangle(N, 0.75, 1.8, 0.875)
 p1$prob          <- rtriangle(N, 0.25, 0.837, 0.33)
 p1$cost          <- rtriangle(N, 13.1, 37.96, 24)
 p1$sales         <- 0
-p1$prizes        <- 0
 p1$discount_rate_priv <- discount_rate_priv
 p2 <- data.frame(subject=1:N, phase=factor('P2'))
 p2$time          <- rtriangle(N, 0.75, 2.5, 1.08)
 p2$sales         <- 0
-p2$prizes        <- 0
 # TODO: Below cost is incorrectly reported in DRIVE-AB report!
 p2$cost          <- rtriangle(N, 4.55, 46.36, 12.95)
 p2$sales         <- 0
-p2$prizes        <- 0
 p2$prob          <- rtriangle(N, 0.34, 0.74, 0.5)
 p2$discount_rate_priv <- discount_rate_priv
 p3 <- data.frame(subject=1:N, phase=factor('P3'))
@@ -149,21 +139,18 @@ p3$time          <- rtriangle(N, 0.83, 3.83, 1.82)
 p3$cost          <- rtriangle(N, 10, 47, 21.8)
 p3$prob          <- rtriangle(N, 0.314, 0.786, 0.67)
 p3$sales         <- 0
-p3$prizes        <- 0
 p3$discount_rate_priv <- discount_rate_priv
 p4 <- data.frame(subject=1:N, phase=factor('P4'))
 p4$time          <- rtriangle(N, 0.5, 1.04, 0.75)
 p4$prob          <- rtriangle(N, 0.83, 0.99, 0.85)
 p4$cost          <- rtriangle(N, 55.5, 127.91, 88.35)
 p4$sales         <- 0
-p4$prizes        <- 0
 p4$discount_rate_priv <- discount_rate_priv
 mp <- data.frame(subject=1:N, phase=factor('MP'))
 mp$prob          <- 1
 mp$cost          <- 0
 mp$sales         <- rtriangle(N, 0, 4336.00, 2559.5) # TODO: Does not model
 # DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
-mp$prizes        <- 0
 mp$time          <- 10
 mp$discount_rate_priv <- discount_rate_priv
 driveab2018 <- rbind(pc, p1, p2, p3, p4, mp) # Combine phases
@@ -201,6 +188,7 @@ When we apply different interventions to the control group we will thus create d
 As the interventions are applied to the control group rather than to completely new samples, we are able to perform "within subject analysis" rather than having to resort to "across subject analysis".
 
 ```{r}
+phases$prizes <- 0
 phases$intervention <- 'NONE'
 ```
 
