@@ -260,7 +260,17 @@ p4 <- ggplot(phases, aes(sales, color=src, fill=src)) +
         panel.grid.major.y=element_blank(),
         legend.position='none') +
   xlab('Sales (million USD)')
-ggarrange(p1, p2, p3, p4, ncol=2, nrow=2, common.legend=TRUE, legend='right')
+p5 <- ggplot(phases, aes(discount_rate_priv*100, color=src, fill=src)) +
+  geom_freqpoly() +
+  facet_grid(phase ~ ., scale='free_y') +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.minor.y=element_blank(),
+        panel.grid.major.y=element_blank(),
+        legend.position='none') +
+  xlab('Discount rate (%)')
+ggarrange(p1, p2, p3, p4, p5, ncol=3, nrow=2, common.legend=TRUE, legend='bottom')
 ```
 
 Interestingly, some parameters are quite dispersly distributed between phases.
