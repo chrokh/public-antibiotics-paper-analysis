@@ -61,7 +61,7 @@ The points of differentiation are outlined as comments in the code chunk below.
 
 ```{r}
 # Same across all phases
-discount_rate <- runif(N, 0.09, 0.24)
+discount_rate_priv <- runif(N, 0.09, 0.24)
 
 # Samples phases
 pc <- data.frame(subject=1:N, phase=factor('PC'))
@@ -70,42 +70,42 @@ pc$cost             <- runif(N, min=19, max=23.2)
 pc$sales            <- rep(0, N)
 pc$prizes           <- rep(0, N)
 pc$prob             <- runif(N, min=0.175, max=0.69)
-pc$discount_rate    <- discount_rate
+pc$discount_rate_priv <- discount_rate_priv
 p1 <- data.frame(subject=1:N, phase=factor('P1'))
 p1$time             <- runif(N, min=0.75, max=1.8)
 p1$prob             <- runif(N, min=0.25, max=0.837)
 p1$cost             <- runif(N, min=7.3, max=12)
 p1$sales            <- rep(0, N)
 p1$prizes           <- rep(0, N)
-p1$discount_rate    <- discount_rate
+p1$discount_rate_priv <- discount_rate_priv
 p2 <- data.frame(subject=1:N, phase=factor('P2'))
 p2$time             <- runif(N, min=0.75, max=2.5)
 p2$sales            <- rep(0, N)
 p2$prizes           <- rep(0, N)
 p2$cost             <- runif(N, min=7.12, max=18.72)
 p2$prob             <- runif(N, min=0.34, max=0.74)
-p2$discount_rate    <- discount_rate
+p2$discount_rate_priv <- discount_rate_priv
 p3 <- data.frame(subject=1:N, phase=factor('P3'))
 p3$cost             <- runif(N, min=26.88, max=121.68)
 p3$prob             <- runif(N, min=0.314, max=0.786)
 p3$time             <- runif(N, min=0.83, max=3.9)
 p3$sales            <- rep(0, N)
 p3$prizes           <- rep(0, N)
-p3$discount_rate    <- discount_rate
+p3$discount_rate_priv <- discount_rate_priv
 p4 <- data.frame(subject=1:N, phase=factor('P4'))
 p4$time             <- runif(N, min=0.5, max=1.04)
 p4$prob             <- runif(N, min=0.83, max=0.99)
 p4$cost             <- rep(98.297168, N)
 p4$sales            <- rep(0, N)
 p4$prizes           <- rep(0, N)
-p4$discount_rate    <- discount_rate
+p4$discount_rate_priv <- discount_rate_priv
 mp <- data.frame(subject=1:N, phase=factor('MP'))
 mp$prob          <- 1
 mp$cost          <- 0
 mp$sales         <- runif(N, min=218, max=2500)
 mp$prizes        <- 0
 mp$time          <- 10
-mp$discount_rate <- discount_rate
+mp$discount_rate_priv <- discount_rate_priv
 
 # Combine all phases into single dataset
 sertkaya2014 <- rbind(pc, p1, p2, p3, p4, mp)
@@ -119,21 +119,21 @@ This is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported as comments in the code chunk below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
 
 ```{r}
-discount_rate <- runif(N, 0.05, 0.30) # Same across phases
+discount_rate_priv <- runif(N, 0.05, 0.30) # Same across phases
 pc <- data.frame(subject=1:N, phase=factor('PC'))
 pc$time          <- rtriangle(N, 4.33, 6, 5.5)
 pc$cost          <- rtriangle(N, 14.25, 29, 21.1)
 pc$sales         <- 0
 pc$prizes        <- 0
 pc$prob          <- rtriangle(N, 0.175, 0.69, 0.352)
-pc$discount_rate <- discount_rate
+pc$discount_rate_priv <- discount_rate_priv
 p1 <- data.frame(subject=1:N, phase=factor('P1'))
 p1$time          <- rtriangle(N, 0.75, 1.8, 0.875)
 p1$prob          <- rtriangle(N, 0.25, 0.837, 0.33)
 p1$cost          <- rtriangle(N, 13.1, 37.96, 24)
 p1$sales         <- 0
 p1$prizes        <- 0
-p1$discount_rate <- discount_rate
+p1$discount_rate_priv <- discount_rate_priv
 p2 <- data.frame(subject=1:N, phase=factor('P2'))
 p2$time          <- rtriangle(N, 0.75, 2.5, 1.08)
 p2$sales         <- 0
@@ -143,21 +143,21 @@ p2$cost          <- rtriangle(N, 4.55, 46.36, 12.95)
 p2$sales         <- 0
 p2$prizes        <- 0
 p2$prob          <- rtriangle(N, 0.34, 0.74, 0.5)
-p2$discount_rate <- discount_rate
+p2$discount_rate_priv <- discount_rate_priv
 p3 <- data.frame(subject=1:N, phase=factor('P3'))
 p3$time          <- rtriangle(N, 0.83, 3.83, 1.82)
 p3$cost          <- rtriangle(N, 10, 47, 21.8)
 p3$prob          <- rtriangle(N, 0.314, 0.786, 0.67)
 p3$sales         <- 0
 p3$prizes        <- 0
-p3$discount_rate <- discount_rate
+p3$discount_rate_priv <- discount_rate_priv
 p4 <- data.frame(subject=1:N, phase=factor('P4'))
 p4$time          <- rtriangle(N, 0.5, 1.04, 0.75)
 p4$prob          <- rtriangle(N, 0.83, 0.99, 0.85)
 p4$cost          <- rtriangle(N, 55.5, 127.91, 88.35)
 p4$sales         <- 0
 p4$prizes        <- 0
-p4$discount_rate <- discount_rate
+p4$discount_rate_priv <- discount_rate_priv
 mp <- data.frame(subject=1:N, phase=factor('MP'))
 mp$prob          <- 1
 mp$cost          <- 0
@@ -165,7 +165,7 @@ mp$sales         <- rtriangle(N, 0, 4336.00, 2559.5) # TODO: Does not model
 # DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
 mp$prizes        <- 0
 mp$time          <- 10
-mp$discount_rate <- discount_rate
+mp$discount_rate_priv <- discount_rate_priv
 driveab2018 <- rbind(pc, p1, p2, p3, p4, mp) # Combine phases
 driveab2018$src <- 'DRIVE-AB (2018)' # Set source
 ```
@@ -196,12 +196,30 @@ phases$phase <- factor(phases$phase, levels=phase_names, ordered=TRUE)
 
 Later we will apply interventions to this dataset and thereby create multiple permutations/versions of every observation.
 This means that we must keep track of which intervention we're currently looking at, and as such we'll add that column immediately, and declare all the current data as suffering from "no intervention".
-In terms of a randomized controlled trial, an intervention can be thought of as a "treatment".
+In terms of a randomized controlled trial, this is the "control group".
+When we apply different interventions to the control group we will thus create different "treatment groups".
+As the interventions are applied to the control group rather than to completely new samples, we are able to perform "within subject analysis" rather than having to resort to "across subject analysis".
 
 ```{r}
 phases$intervention <- 'NONE'
 ```
 
+Finally, let us add a "public discount rate".
+Meaning the cost of capital for the benefactor, i.e. for the body that pays the intervention with no expectation of monetary return.
+This parameter is used in the analysis, where its raison d'etre is also further explained.
+
+```{r}
+publ_dr_min = 0.035
+publ_dr_max = 0.045
+```
+
+We assume that the benefactor is the public sector and use a uniformly distributed discount rate between `r publ_dr_min * 100`% and `r publ_dr_max * 100`%.
+Public discount rate varies across subjects but not within.
+The same subject has the same public discount rate across all datasets (i.e. sources).
+
+```{r}
+phases$discount_rate_publ <- runif(N, publ_dr_min, publ_dr_max)
+```
 
 ## Summary statistics
 Let us plot the phase parameters as frequency polygons (i.e. histograms) for each of the sources.
@@ -262,7 +280,7 @@ The first plot is grouped by property, while the second by phase.
 # Transform: phase properties to long from wide
 phase_props <- phases %>%
   filter(phase != 'MP') %>%
-  select(-intervention, -discount_rate) %>%
+  select(src, subject, phase, cost, time, prob) %>%
   gather(key='prop', value='value', -src, -subject, -phase) %>%
   group_by(src, subject, prop) %>%
   mutate(total = sum(value),
@@ -367,7 +385,13 @@ $\sum_{t\in T} \mathit{EV}_t$
 
 $$
 \mathit{ENV_T} = \sum_{t\in T} EV_t\\
+$$
+
+$$
 \mathit{NPV_T} = \sum_{t\in T} \mathit{PV}_t\\
+$$
+
+$$
 \mathit{ENPV_T} = \sum_{t\in T} \mathit{EPV}_t\\
 $$
 
@@ -406,7 +430,7 @@ phase_based_valuation <- function(phases) {
              # cashflows
              cashflow = sales + prizes - cost,
              ev = cashflow * prob_to,
-             pv = cashflow / ((1 + discount_rate) ^ time_to),
+             pv = cashflow / ((1 + discount_rate_priv) ^ time_to),
              epv = pv * prob_to,
              # cumulatives
              cum = cumsum(cashflow),
@@ -600,12 +624,13 @@ to_years <- function (phases) {
                    phase_year = x,
                    t = phases$t + x - 1,
                    phase = phases$phase,
+                   discount_rate_publ = phases$discount_rate_publ,
                    cost,
                    sales,
                    prizes,
                    prob,
                    time = phases$time,
-                   discount_rate = phases$discount_rate
+                   discount_rate_priv = phases$discount_rate_priv
                    ) %>%
     filter(x <= time | (x <= time + 1 & has_decimals)) %>% # Only years in phase
     select(-c('part_of_phase')) # Remove temporary column
@@ -657,15 +682,15 @@ for (from in phase_levels) {
            # cost
            cost_ev         = cost * prob_to, # TODO:ok?
            cost_env     = cumsum(cost_ev),
-           cost_pv         = cost / ((1 + discount_rate) ^ time_to),
-           cost_epv        = (cost / ((1 + discount_rate) ^ time_to)) * prob_to,
+           cost_pv         = cost / ((1 + discount_rate_priv) ^ time_to),
+           cost_epv        = (cost / ((1 + discount_rate_priv) ^ time_to)) * prob_to,
            cost_npv        = cumsum(cost_pv),
            cost_enpv       = cumsum(cost_epv), # TODO:ok?
            # revenue
            revenue_ev      = revenue * prob_to, # TODO:ok?
            revenue_env  = cumsum(revenue_ev),
-           revenue_pv      = revenue / ((1 + discount_rate) ^ time_to),
-           revenue_epv     = (revenue / ((1 + discount_rate) ^ time_to)) * prob_to,
+           revenue_pv      = revenue / ((1 + discount_rate_priv) ^ time_to),
+           revenue_epv     = (revenue / ((1 + discount_rate_priv) ^ time_to)) * prob_to,
            revenue_npv     = cumsum(revenue_pv),
            revenue_enpv    = cumsum(revenue_epv), # TODO:ok?
            # cashflow
@@ -744,7 +769,7 @@ years_from_phases_long_sum %>%
 Another way to look at the data is to consider how starting at different phases alter the value of the project.
 We begin by plotting the mean value of bringing the project to completion from whatever starting phase we're currently considering.
 Using the four metrics previously applied.
-The vertical lines delimit +/- standard deviations from the sample mean (i.e. ~68% of the data).
+The vertical lines delimit +/- 1 standard deviations from the sample mean (i.e. ~68% of the data).
 
 ```{r, echo=FALSE}
 pos <- position_dodge(0.4)
@@ -901,7 +926,7 @@ public_discount_rate_max = 0.045
 
 In order to reason about the cost for the benefactor of issuing a prize we will compute the necessarily negative ENPV of issuing said prize.
 ENPV is an appropriate measure, since the prize is probabilistically issued in the future.
-We assume that the benefactor is the public sector and use a uniformly distributed discount rate between `r public_discount_rate_min * 100`% and `r public_discount_rate_max * 100`%.
+As previously described, we assume that the benefactor is the public sector and employ a uniformly distributed discount rate between `r publ_dr_min * 100`% and `r publ_dr_max * 100`%.
 We refer to the expected cost of a prize (i.e. an intervention) as *indirect ENPV*.
 This can be thought of as the expected cost for the benefactor.
 
@@ -909,23 +934,10 @@ If indirect ENPV is the cost of the intervention for the public, then we must al
 To take both cost of capital and project risk into consideration, we will again compute the negative ENPV.
 The probabilistic cashflows used in the ENPV calculation in this case is the project's cost without any expectation of revenues.
 We assume that the public payer is the same as the benefactor and hence employ discount rates from the same distribution
-(`r public_discount_rate_min*100`% - `r public_discount_rate_max*100`%).
+(`r publ_dr_min * 100`% - `r publ_dr_max * 100`%).
 We refer to the expected cost of paying for the project at cost as *direct ENPV*.
 
-Let us first add public discount rates like this:
-
-```{r}
-rates = runif(N, min=public_discount_rate_min, max=public_discount_rate_max)
-comparable_years <- comparable_years %>%
-  # Private discount rate
-  rename(discount_rate_priv = discount_rate) %>%
-  # Public discount rate (keep consistent within subjects)
-  group_by(subject) %>%
-  mutate(discount_rate_publ = rates[subject]) %>%
-  ungroup
-```
-
-and then compute private, direct, and indirect ENPV like this:
+We compute private, direct, and indirect ENPV like this:
 
 ```{r}
 comparable_years <- comparable_years %>%
@@ -942,7 +954,7 @@ comparable_years <- comparable_years %>%
   select(-prob_to)
 ```
 
-Finally, we can extract the different ENPV values from the perspective of pre-clinical, like this:
+We extract the different ENPV values from the perspective of pre-clinical, like this:
 
 ```{r}
 finals <- comparable_years %>%
