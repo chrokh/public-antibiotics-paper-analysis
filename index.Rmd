@@ -873,6 +873,16 @@ print(intervened %>%
       guides(fill = FALSE))
 ```
 
+We then convert the data to yearly, and restructure it so that every row with an intervenetion is matched with the corresponding row without an intervention.
+
+```{r}
+intervened_years <- to_years(intervened)
+control <- filter(intervened_years, intervention == 'NONE')
+treated <- filter(intervened_years, intervention != 'NONE')
+comparable_years <-
+  semi_join(treated, control, by=c('src', 'subject', 'phase', 't'))
+```
+
 
 # Analysis
 
@@ -902,17 +912,23 @@ We assume that the public payer is the same as the benefactor and hence employ d
 (`r public_discount_rate_min*100`% - `r public_discount_rate_max*100`%).
 We refer to the expected cost of paying for the project at cost as *direct ENPV*.
 
+Let us first add public discount rates like this:
 
-```{r, echo=FALSE}
-valuations <-
-  to_years(intervened) %>%
+```{r}
+rates = runif(N, min=public_discount_rate_min, max=public_discount_rate_max)
+comparable_years <- comparable_years %>%
+  # Private discount rate
   rename(discount_rate_priv = discount_rate) %>%
-
-  # Add public discount rate
+  # Public discount rate (keep consistent within subjects)
   group_by(subject) %>%
-  mutate(discount_rate_publ = runif(1, min=0.035, max=0.045)) %>%
-  ungroup %>%
+  mutate(discount_rate_publ = rates[subject]) %>%
+  ungroup
+```
 
+and then compute private, direct, and indirect ENPV like this:
+
+```{r}
+comparable_years <- comparable_years %>%
   arrange(t) %>%
   group_by(src, subject, intervention) %>%
   mutate(
@@ -924,26 +940,24 @@ valuations <-
          enpv_benf = cumsum((-prizes / ((1 + discount_rate_publ) ^ t)) * prob_to),
          ) %>%
   select(-prob_to)
+```
 
-finals <- valuations %>%
+Finally, we can extract the different ENPV values from the perspective of pre-clinical, like this:
+
+```{r}
+finals <- comparable_years %>%
   arrange(t) %>%
   group_by(src, subject, intervention) %>%
   summarise(
-         prizes    = sum(prizes),
+         prizes = sum(prizes),
          enpv_priv = tail(enpv_priv, n=1),
          enpv_publ = tail(enpv_publ, n=1),
-         enpv_benf = tail(enpv_benf, n=1)
-         )
+         enpv_benf = tail(enpv_benf, n=1))
 ```
-
-```{r, include=FALSE}
-benf_higher <- filter(finals, enpv_benf > enpv_publ)
-```
-
 
 ## Prizes and private ENPV
 Before we proceed further, let us first ensure that the issued prizes (i.e. the interventions) actually do have an effect on private ENPV.
-As such there should be a correlation between prize size and private ENPV in all data sets.
+As such there should be a correlation between prize size and private ENPV in all datasets.
 
 ```{r, echo=FALSE}
 print(finals %>%
@@ -962,12 +976,11 @@ TODO: Compute ENPV improvement since it will always be >= 0 and then plot that o
 </div>
 
 Intervention prize and private ENPV, expectedly, seem correlated.
-As other studies have shown, the later a prize is awarded, the higher size needs to be to achieve a comparative increase in ENPV.
+As other studies have shown, the later a prize is awarded, the higher the size must be to achieve a comparative increase in ENPV.
 This phenomena is clearly visible in our model when plotting the correlation between prize size and private ENPV for all interventions on the same scale.
 
 ```{r, echo=FALSE}
 print(finals %>%
-  filter(intervention != 'NONE') %>%
   ggplot(aes(prizes, enpv_priv, color=intervention)) +
   geom_smooth(method='lm', se=FALSE) +
   geom_point(alpha=0.5, shape=1) +
