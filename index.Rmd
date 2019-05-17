@@ -60,49 +60,49 @@ The points of differentiation are outlined as comments in the code chunk below.
 </div>
 
 ```{r}
-# Same across all phases
-discount_rate_priv <- runif(N, 0.09, 0.24)
-
-# Samples phases
-pc <- data.frame(subject=1:N, phase=factor('PC'))
-pc$time             <- runif(N, min=4.3, max=6)
-pc$cost             <- runif(N, min=19, max=23.2)
-pc$sales            <- 0
-pc$prob             <- runif(N, min=0.175, max=0.69)
-pc$discount_rate_priv <- discount_rate_priv
-p1 <- data.frame(subject=1:N, phase=factor('P1'))
-p1$time             <- runif(N, min=0.75, max=1.8)
-p1$prob             <- runif(N, min=0.25, max=0.837)
-p1$cost             <- runif(N, min=7.3, max=12)
-p1$sales            <- 0
-p1$discount_rate_priv <- discount_rate_priv
-p2 <- data.frame(subject=1:N, phase=factor('P2'))
-p2$time             <- runif(N, min=0.75, max=2.5)
-p2$sales            <- 0
-p2$cost             <- runif(N, min=7.12, max=18.72)
-p2$prob             <- runif(N, min=0.34, max=0.74)
-p2$discount_rate_priv <- discount_rate_priv
-p3 <- data.frame(subject=1:N, phase=factor('P3'))
-p3$cost             <- runif(N, min=26.88, max=121.68)
-p3$prob             <- runif(N, min=0.314, max=0.786)
-p3$time             <- runif(N, min=0.83, max=3.9)
-p3$sales            <- 0
-p3$discount_rate_priv <- discount_rate_priv
-p4 <- data.frame(subject=1:N, phase=factor('P4'))
-p4$time             <- runif(N, min=0.5, max=1.04)
-p4$prob             <- runif(N, min=0.83, max=0.99)
-p4$cost             <- 98.297168
-p4$sales            <- 0
-p4$discount_rate_priv <- discount_rate_priv
-mp <- data.frame(subject=1:N, phase=factor('MP'))
-mp$prob          <- 1
-mp$cost          <- 0
-mp$sales         <- runif(N, min=218, max=2500)
-mp$time          <- 10
-mp$discount_rate_priv <- discount_rate_priv
+pc <- data.frame(
+  phase = 'PC',
+  time  = runif(N, min=4.3, max=6),
+  cost  = runif(N, min=19, max=23.2),
+  prob  = runif(N, min=0.175, max=0.69),
+  sales = 0)
+p1 <- data.frame(
+  phase = 'P1',
+  time  = runif(N, min=0.75, max=1.8),
+  prob  = runif(N, min=0.25, max=0.837),
+  cost  = runif(N, min=7.3, max=12),
+  sales = 0)
+p2 <- data.frame(
+  phase = 'P2',
+  time  = runif(N, min=0.75, max=2.5),
+  cost  = runif(N, min=7.12, max=18.72),
+  prob  = runif(N, min=0.34, max=0.74),
+  sales = 0)
+p3 <- data.frame(
+  phase = 'P3',
+  cost  = runif(N, min=26.88, max=121.68),
+  prob  = runif(N, min=0.314, max=0.786),
+  time  = runif(N, min=0.83, max=3.9),
+  sales = 0)
+p4 <- data.frame(
+  phase = 'P4',
+  time  = runif(N, min=0.5, max=1.04),
+  prob  = runif(N, min=0.83, max=0.99),
+  cost  = 98.297168,
+  sales = 0)
+mp <- data.frame(
+  phase = 'MP',
+  time  = 10,
+  prob  = 1,
+  cost  = 0,
+  sales = runif(N, min=218, max=2500))
 
 # Combine all phases into single dataset
 sertkaya2014 <- rbind(pc, p1, p2, p3, p4, mp)
+sertkaya2014$subject <- 1:N
+
+# Discount rate is the same across all phases
+sertkaya2014$discount_rate_priv <- runif(N, 0.09, 0.24)
 
 # Set source name
 sertkaya2014$src <- 'Sertkaya et. al (2014)'
@@ -113,48 +113,52 @@ This is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported as comments in the code chunk below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
 
 ```{r}
-discount_rate_priv <- runif(N, 0.05, 0.30) # Same across phases
-pc <- data.frame(subject=1:N, phase=factor('PC'))
-pc$time          <- rtriangle(N, 4.33, 6, 5.5)
-pc$cost          <- rtriangle(N, 14.25, 29, 21.1)
-pc$sales         <- 0
-pc$prob          <- rtriangle(N, 0.175, 0.69, 0.352)
-pc$discount_rate_priv <- discount_rate_priv
-p1 <- data.frame(subject=1:N, phase=factor('P1'))
-p1$time          <- rtriangle(N, 0.75, 1.8, 0.875)
-p1$prob          <- rtriangle(N, 0.25, 0.837, 0.33)
-p1$cost          <- rtriangle(N, 13.1, 37.96, 24)
-p1$sales         <- 0
-p1$discount_rate_priv <- discount_rate_priv
-p2 <- data.frame(subject=1:N, phase=factor('P2'))
-p2$time          <- rtriangle(N, 0.75, 2.5, 1.08)
-p2$sales         <- 0
-# TODO: Below cost is incorrectly reported in DRIVE-AB report!
-p2$cost          <- rtriangle(N, 4.55, 46.36, 12.95)
-p2$sales         <- 0
-p2$prob          <- rtriangle(N, 0.34, 0.74, 0.5)
-p2$discount_rate_priv <- discount_rate_priv
-p3 <- data.frame(subject=1:N, phase=factor('P3'))
-p3$time          <- rtriangle(N, 0.83, 3.83, 1.82)
-p3$cost          <- rtriangle(N, 10, 47, 21.8)
-p3$prob          <- rtriangle(N, 0.314, 0.786, 0.67)
-p3$sales         <- 0
-p3$discount_rate_priv <- discount_rate_priv
-p4 <- data.frame(subject=1:N, phase=factor('P4'))
-p4$time          <- rtriangle(N, 0.5, 1.04, 0.75)
-p4$prob          <- rtriangle(N, 0.83, 0.99, 0.85)
-p4$cost          <- rtriangle(N, 55.5, 127.91, 88.35)
-p4$sales         <- 0
-p4$discount_rate_priv <- discount_rate_priv
-mp <- data.frame(subject=1:N, phase=factor('MP'))
-mp$prob          <- 1
-mp$cost          <- 0
-mp$sales         <- rtriangle(N, 0, 4336.00, 2559.5) # TODO: Does not model
-# DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
-mp$time          <- 10
-mp$discount_rate_priv <- discount_rate_priv
-driveab2018 <- rbind(pc, p1, p2, p3, p4, mp) # Combine phases
-driveab2018$src <- 'DRIVE-AB (2018)' # Set source
+pc <- data.frame(
+  phase = 'PC',
+  time  = rtriangle(N, 4.33, 6, 5.5),
+  cost  = rtriangle(N, 14.25, 29, 21.1),
+  prob  = rtriangle(N, 0.175, 0.69, 0.352),
+  sales = 0)
+p1 <- data.frame(
+  phase = 'P1',
+  time  = rtriangle(N, 0.75, 1.8, 0.875),
+  prob  = rtriangle(N, 0.25, 0.837, 0.33),
+  cost  = rtriangle(N, 13.1, 37.96, 24),
+  sales = 0)
+p2 <- data.frame(
+  phase = 'P2',
+  time  = rtriangle(N, 0.75, 2.5, 1.08),
+  prob  = rtriangle(N, 0.34, 0.74, 0.5),
+  cost  = rtriangle(N, 4.55, 46.36, 12.95), # TODO: Cost is incorrectly reported in DRIVE-AB report!
+  sales = 0)
+p3 <- data.frame(
+  phase = 'P3',
+  time  = rtriangle(N, 0.83, 3.83, 1.82),
+  prob  = rtriangle(N, 0.314, 0.786, 0.67),
+  cost  = rtriangle(N, 10, 47, 21.8),
+  sales = 0)
+p4 <- data.frame(
+  phase = 'P4',
+  time  = rtriangle(N, 0.5, 1.04, 0.75),
+  prob  = rtriangle(N, 0.83, 0.99, 0.85),
+  cost  = rtriangle(N, 55.5, 127.91, 88.35),
+  sales = 0)
+mp <- data.frame(
+  phase = 'MP',
+  time  = 10,
+  prob  = 1,
+  cost  = 0,
+  sales = rtriangle(N, 0, 4336.00, 2559.5)) # TODO: Does not model DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
+
+# Combine all phases into single dataset
+driveab2018 <- rbind(pc, p1, p2, p3, p4, mp)
+driveab2018$subject <- 1:N
+
+# Discount rate is the same across all phases
+driveab2018$discount_rate_priv <- runif(N, 0.05, 0.30)
+
+# Set source name
+driveab2018$src <- 'DRIVE-AB (2018)'
 ```
 
 
