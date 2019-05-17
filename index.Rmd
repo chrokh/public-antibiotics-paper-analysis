@@ -415,13 +415,41 @@ To elucidate the consequence of these differences we will first apply financial 
 As phase durations are long, the time value of money not only greatly reduces the attractiveness of revenues, but also dampen the pain of costs.
 If we disregard the fact that some phases (such as e.g. pre-clinical) are lengthy, and assume that the cashflows related to a phase all happen immediately upon entry into the phase, we can trivially compute Expected Value (EV), Present Value (PV), and Expected Present Value (EPV) of all phases from the perspective of all phases.
 We can then cumulate these metrics in order to, respectively, compute cumulative EV, Net Present Value (NPV), and Expected Net Present Value (ENPV) from any phase to any phase.
-We compute the above like this:
+
+However, before performing this computation we must make an assumption as to how the free market revenues is distributed over the time spent in market.
+Assuming that all revenues are secured directly upon market entry is a wildly inadequate assumption that will significantly skew the results due to discounting (i.e. the time value of money).
+
+We assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total revenues of the phase.
+The first year will thus be non-zero if the total revenues of the project is non-zero.
+We compute the yearly revenues like this:
 
 ```{r}
-phase_based_valuation <- function(phases) {
+phasely <- data.frame(phases)
+market_years <- phases %>% filter(phase == 'MP')
+sales_slope <- (market_years$sales * 2 / (market_years$time + 1)) / market_years$time
+for (yr in 0:max(market_years$time)) {
+  MYr <- data.frame(market_years)
+  MYr$phase <- paste('Y', yr, sep = '')
+  MYr$time  <- 1
+  MYr$prob  <- MYr$prob ^ (1 / MYr$time)
+  MYr$cost  <- MYr$cost / MYr$time
+  MYr$sales <- ifelse(MYr$time <= yr, yr * sales_slope, 0)
+  phasely <- rbind(phasely, MYr)
+}
+# Remove market phases since we've now added market years:
+phasely <- filter(phasely, phase != 'MP')
+# Re-code ordered factor:
+myr_names <- c('Y0','Y1','Y2','Y3','Y4','Y5','Y6','Y7','Y8','Y9','Y10')
+phasely$phase <- factor(phasely$phase, levels=c(phase_names, myr_names), ordered=TRUE)
+```
+
+We can now compute the valuation metrics discussed above as follows:
+
+```{r}
+phase_based_valuation <- function(phs) {
   result <- tibble()
   for (from in phase_levels) {
-    rows <- phases %>%
+    rows <- phs %>%
       filter(phase >= from) %>%
       group_by(src, intervention, subject) %>%
       arrange(src, intervention, subject, phase) %>%
@@ -446,127 +474,71 @@ phase_based_valuation <- function(phases) {
 }
 ```
 
+Before plotting we must do a bit of data wrangling.
+
 ```{r}
-phases_from_phases <- phase_based_valuation(phases)
+phasely_phases_from_phases <- phase_based_valuation(phasely)
+
+# Long
+phasely_phases_from_phases_long <- phasely_phases_from_phases %>%
+  select(src, intervention, subject, from, phase,
+         cashflow, ev, pv, epv,
+         cum, env, npv, enpv) %>%
+  gather('valuation', 'value', -src, -intervention, -subject, -from, -phase) %>%
+  transform(valuation = factor(valuation, levels = c(metrics, cum_metrics)))
+
+# Long summary
+phasely_phases_from_phases_long_sum <- phasely_phases_from_phases_long %>%
+  group_by(src, from, phase, valuation) %>%
+  mutate(mu  = mean(value),
+         med = median(value),
+         std = sd(value))
+
+# Final long
+phasely_final_from_phases_long <- phasely_phases_from_phases_long %>%
+  filter(valuation %in% cum_metrics) %>%
+  group_by(src, subject, from, valuation) %>%
+  arrange(phase) %>%
+  summarize(value = tail(value, n=1))
+
+# Final long summary
+phasely_final_from_phases_long_sum <- phasely_phases_from_phases_long_sum %>%
+  filter(valuation %in% cum_metrics) %>%
+  group_by(src, from, valuation) %>%
+  arrange(phase) %>%
+  summarize(mu  = tail(mu, n=1),
+            med = tail(med, n=1),
+            std = tail(std, n=1))
 ```
 
-Let us first plot the valuation of each individual phase from the perspective of pre-clinical.
+Let us then plot the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
+Note the usage of different scales across the different metrics due the vastly different values.
 
-<div class="alert alert-danger">
-TODO: In the plots below we're ignoring the value at the market since it dwarfs all other values as a consequence of being an immediate lump-sum. Split the market years into M1-M10 for both approaches so that we can plot the market here as well. This is very important as it gives a wildly incorrect valuation.
-</div>
-
-```{r, echo=FALSE}
-sub <- filter(phases_from_phases, from == 'PC' & phase != 'MP')
-p1 <- ggplot(sub, aes(phase, cashflow, color=src)) +
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+phasely_final_from_phases_long %>%
+  filter(from == 'PC' & valuation %in% cum_metrics) %>%
+  ggplot(aes(valuation, value, fill=src)) +
+  geom_boxplot() +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('Cashflow') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p2 <- ggplot(sub, aes(phase, ev, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('EV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p3 <- ggplot(sub, aes(phase, pv, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('PV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p4 <- ggplot(sub, aes(phase, epv, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('EPV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-ggarrange(p1, p2, p3, p4, ncol=2, nrow=2, common.legend=TRUE, legend='right')
-```
-
-Let us now plot the cumulative value at each individual phase using pre-clinical as the starting point.
-
-<div class="alert alert-danger">
-TODO: In the plots below we're ignoring the value at the market since it dwarfs all other values as a consequence of being an immediate lump-sum. Split the market years into M1-M10 for both approaches so that we can plot the market here as well. This is very important as it gives a wildly incorrect valuation.
-</div>
-
-```{r, echo=FALSE}
-sub <- filter(phases_from_phases, from == 'PC' & phase != 'MP')
-p1 <- ggplot(sub, aes(phase, cum, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('Cumulative cashflow') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p2 <- ggplot(sub, aes(phase, env, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('ENV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p3 <- ggplot(sub, aes(phase, npv, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('NPV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-p4 <- ggplot(sub, aes(phase, enpv, color=src)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  ggtitle('ENPV') +
-  xlab(element_blank()) + ylab(element_blank()) +
-  geom_boxplot()
-ggarrange(p1, p2, p3, p4, ncol=2, nrow=2, common.legend=TRUE, legend='right')
+  facet_wrap(. ~ valuation, scale='free', nrow=1)
 ```
 
 Another way to look at the data is to consider how starting at different phases alter the value of the project.
-We simply compute it as follows:
-
-```{r}
-# TODO: Make sure this is a correct calculation!
-final_value_phasewise <- phases_from_phases %>%
-  group_by(src, subject, from) %>%
-  filter(phase == max(phase)) %>%
-  summarise(cum = tail(cum, n=1),
-            env = tail(env, n=1),
-            npv = tail(npv, n=1),
-            enpv = tail(enpv, n=1))
-
-final_value_phasewise_long <- final_value_phasewise %>%
-  gather('valuation', 'value', cum, env, npv, enpv)
-
-final_value_phasewise_long_summary <- final_value_phasewise_long %>%
-  group_by(src, from, valuation) %>%
-  summarize(median = median(value),
-            mean = mean(value),
-            sd   = sd(value),
-            min  = min(value),
-            max  = max(value))
-```
-
-We begin by plotting the mean value of bringing the project to completion from whatever starting phase we're currently considering.
-Using the four metrics previously applied.
+Below we plot the mean value of bringing the project to completion from various starting phases, using the four cumulative metrics.
 The vertical lines delimit +/- 1 standard deviation from the sample mean (i.e. ~68% of the data).
 
 ```{r, echo=FALSE}
-pos <- position_dodge(0.2)
-print(final_value_phasewise_long_summary %>%
-      ggplot(aes(from, mean, color=valuation, group=valuation)) +
-      geom_linerange(aes(ymin=mean-sd, ymax=mean+sd), position=pos, size=1) +
-      geom_line(position=pos, size=1, linetype='dotted') +
-      geom_point(position=pos, size=2) +
-      facet_wrap(. ~ src, ncol=2) +
-      scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-      xlab(element_blank()) + ylab(element_blank()))
-
-# ALTERNATIVE:
-# final_value_phasewise_long %>%
-#   filter(from != 'MP' & src == curr) %>%
-#   ggplot(aes(from, value, fill=valuation)) +
-#   geom_boxplot()
-```
-
-The table below summarizes the valuation metrics from the start of pre-clinical.
-
-```{r, echo=FALSE}
-sub <- final_value_phasewise_long_summary %>%
-  ungroup %>%
-  filter(from=='PC') %>%
-  select(-from)
-knitr::kable(sub)
+pos <- position_dodge(0.4)
+phasely_final_from_phases_long_sum %>%
+  ggplot(aes(from, mu, color=valuation, group=valuation)) +
+  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
+  geom_line(position=pos, size=1, linetype='dotted') +
+  geom_point(position=pos, size=2) +
+  facet_wrap(. ~ src, ncol=2) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  xlab(element_blank()) + ylab(element_blank())
 ```
 
 ## Year-based method
@@ -656,14 +628,8 @@ While we would divide P1 into three equidistant (years) points (years), that sta
 years <- to_years(phases)
 ```
 
-Before we start introducing interventions, let us first do some descriptive statistics of our year-based datasets.
-
-Let us begin by looking at the cashflows using a few different valuation techniques.
-From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
-The middle line in each ribbon tracks the mean value, while the edges capture all values within 2 standard deviations of the mean (meaning 95% of the data).
-
-```{r, include=FALSE}
-# TODO: Maybe this code should be included? At least explained!
+```{r}
+# TODO: This code needs to be explained in plain-text.
 # Transform: Phase years from different phases
 years_from_phases <- tibble()
 for (from in phase_levels) {
@@ -740,6 +706,27 @@ final_year_from_phases_long_sum <- years_from_phases_long_sum %>%
             std = tail(std, n=1))
 ```
 
+
+As with the phase-based method, let us also do some descriptive statistics.
+We begin with the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
+Again, note the usage of different scales across the different metrics due the vastly different values.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+final_year_from_phases_long %>%
+  filter(from == 'PC' & valuation %in% cum_metrics) %>%
+  ggplot(aes(valuation, value, fill=src)) +
+  geom_boxplot() +
+  xlab(element_blank()) +
+  ylab(element_blank()) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  facet_wrap(. ~ valuation, scale='free', nrow=1)
+```
+
+When we've transformed the data to year-based we've moved from an ordinal to a ratio scale.
+As such it makes sense to explore how these valuations emerge as a consequence of the yearly cashflows of a project.
+From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
+The middle line in each ribbon tracks the mean value, while the edges capture all values within 2 standard deviations of the mean (meaning 95% of the data).
+
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 years_from_phases_long_sum %>%
   filter(from == 'PC') %>%
@@ -773,6 +760,10 @@ We begin by plotting the mean value of bringing the project to completion from w
 Using the four metrics previously applied.
 The vertical lines delimit +/- 1 standard deviations from the sample mean (i.e. ~68% of the data).
 
+<div class="alert alert-danger">
+TODO: Why is cumulative decreasing in P1? That should be impossible? This must be an error?
+</div>
+
 ```{r, echo=FALSE}
 pos <- position_dodge(0.4)
 final_year_from_phases_long_sum %>%
@@ -802,7 +793,7 @@ In fact, the cumulative metric should yield exactly the same results in both met
 When computing ENV however, we take probability into account, and as a consequence, the outcome could in theory be different, but in practice, i.e. in the plot below, we observe that the difference is insignificant.
 
 ```{r, echo=FALSE, warning=FALSE}
-pwise <- final_value_phasewise_long
+pwise <- phasely_final_from_phases_long
 ywise <- final_year_from_phases_long
 methods <- c('phase', 'year')
 pwise$method <- factor('phase')
