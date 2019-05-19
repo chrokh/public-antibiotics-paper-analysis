@@ -928,9 +928,9 @@ comparable_years <- comparable_years %>%
          intervention_size = sum(prizes),
          cashflow  = sales + prizes - cost,
          prob_to   = cumprod(prob) / prob, # TODO: Is this correct?
-         enpv_priv = cumsum((cashflow / ((1 + discount_rate_priv) ^ t)) * prob_to),
-         enpv_publ = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to),
-         enpv_benf = cumsum((-prizes / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         enpv_prv = cumsum((cashflow / ((1 + discount_rate_priv) ^ t)) * prob_to),
+         enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         enpv_ind = cumsum((-prizes / ((1 + discount_rate_publ) ^ t)) * prob_to),
          ) %>%
   select(-prob_to)
 ```
@@ -943,9 +943,9 @@ finals <- comparable_years %>%
   group_by(src, subject, intervention) %>%
   summarise(
          prizes = sum(prizes),
-         enpv_priv = tail(enpv_priv, n=1),
-         enpv_publ = tail(enpv_publ, n=1),
-         enpv_benf = tail(enpv_benf, n=1))
+         enpv_prv = tail(enpv_prv, n=1),
+         enpv_dir = tail(enpv_dir, n=1),
+         enpv_ind = tail(enpv_ind, n=1))
 ```
 
 ## Prizes and private ENPV
@@ -954,7 +954,7 @@ As such there should be a correlation between prize size and private ENPV in all
 
 ```{r, echo=FALSE}
 print(finals %>%
-  ggplot(aes(prizes, enpv_priv, color=src)) +
+  ggplot(aes(prizes, enpv_prv, color=src)) +
   geom_point(alpha=1, shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ intervention, ncol=3, scale='free') +
@@ -974,7 +974,7 @@ This phenomena is clearly visible in our model when plotting the correlation bet
 
 ```{r, echo=FALSE}
 print(finals %>%
-  ggplot(aes(prizes, enpv_priv, color=intervention)) +
+  ggplot(aes(prizes, enpv_prv, color=intervention)) +
   geom_smooth(method='lm', se=FALSE) +
   geom_point(alpha=0.5, shape=1) +
   facet_wrap(. ~ src, ncol=3) +
@@ -999,7 +999,7 @@ Note that ENPV for the benefactor necessarily will be negative as the prize payo
 
 ```{r, echo=FALSE}
 finals %>%
-  ggplot(aes(prizes, -enpv_benf, color=intervention)) +
+  ggplot(aes(prizes, -enpv_ind, color=intervention)) +
   geom_point() +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=3) +
@@ -1020,7 +1020,7 @@ TODO: Change above to improvement in ENPV.
 How much it costs the benefactor compared to how much it benefits the beneficiary.
 
 ```{r, echo=FALSE}
-ggplot(finals, aes(y=enpv_priv, x=-enpv_benf, color=intervention)) +
+ggplot(finals, aes(y=enpv_prv, x=-enpv_ind, color=intervention)) +
   geom_point() +
   facet_wrap(. ~ src, ncol=3) +
   geom_smooth(method='lm', se=FALSE) +
@@ -1032,7 +1032,7 @@ ggplot(finals, aes(y=enpv_priv, x=-enpv_benf, color=intervention)) +
 Assuming that a go-decision is reached in pre-clinical whenever private ENPV is greater than or equal to 0, we can use logistic regression to predict whether a particular prize size will yield a go or no-go decision.
 We first compute go-decisions:
 ```{r}
-finals$go <- factor(finals$enpv_priv >= 0, levels=c(TRUE, FALSE))
+finals$go <- factor(finals$enpv_prv >= 0, levels=c(TRUE, FALSE))
 ```
 
 then construct the model and use it to predict values as follows:
@@ -1061,7 +1061,7 @@ In the same fashion, we can construct a model that predicts go-decisions from th
 
 ```{r}
 benf_model <- glm(data=finals,
-             go ~ enpv_benf * interaction(src, intervention),
+             go ~ enpv_ind * interaction(src, intervention),
              family=binomial(link='logit'))
 finals$pred_go_benf <- predict(benf_model, type='response')
 ```
@@ -1069,7 +1069,7 @@ finals$pred_go_benf <- predict(benf_model, type='response')
 This can help us understand how much the benefactor will have to spend in order to achieve a particular go-decision probability.
 ```{r, echo=FALSE}
 finals %>%
-  ggplot(aes(-enpv_benf, (1-pred_go_benf)*100, color=intervention)) +
+  ggplot(aes(-enpv_ind, (1-pred_go_benf)*100, color=intervention)) +
   geom_line() +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:4)),
