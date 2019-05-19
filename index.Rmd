@@ -945,6 +945,7 @@ finals <- comparable_years %>%
   group_by(src, subject, intervention) %>%
   summarise(
          prizes = sum(prizes),
+         enpv_prv_bef = tail(enpv_prv_bef, n=1),
          enpv_prv_aft = tail(enpv_prv_aft, n=1),
          enpv_dir = tail(enpv_dir, n=1),
          enpv_ind = tail(enpv_ind, n=1))
@@ -966,9 +967,21 @@ print(finals %>%
 )
 ```
 
-<div class="alert alert-danger">
-TODO: Compute ENPV improvement since it will always be >= 0 and then plot that on log-y-log-x. Actually, it should even be > 0 and if it is not I should explain why.
-</div>
+While correlation, the data seems more suitable to plot on a logarithmic scale.
+As some observations have negative ENPV however we instead choose to plot the improvement in private ENPV with and without the intervention.
+
+```{r, echo=FALSE}
+print(finals %>%
+  ggplot(aes(prizes, enpv_prv_aft-enpv_prv_bef, color = src)) +
+  geom_point(alpha=0.8, shape=1) +
+  facet_wrap(. ~ intervention, ncol=3, scale='free') +
+  xlab('Prize') +
+  ylab('Private ENPV improvement') +
+  scale_x_continuous(trans='log10') +
+  scale_y_continuous(trans='log10') +
+  theme(legend.position = 'top')
+)
+```
 
 Intervention prize and private ENPV, expectedly, seem correlated.
 As other studies have shown, the later a prize is awarded, the higher the size must be to achieve a comparative increase in ENPV.
@@ -976,20 +989,21 @@ This phenomena is clearly visible in our model when plotting the correlation bet
 
 ```{r, echo=FALSE}
 print(finals %>%
-  ggplot(aes(prizes, enpv_prv_aft, color=intervention)) +
+  ggplot(aes(prizes, enpv_prv_aft - enpv_prv_bef, color=intervention)) +
   geom_smooth(method='lm', se=FALSE) +
-  geom_point(alpha=0.5, shape=1) +
-  facet_wrap(. ~ src, ncol=3) +
+  geom_point(shape=1) +
+  facet_wrap(. ~ src, ncol=3, 'free') +
   xlab('Prize') +
+  scale_y_continuous(trans='log10',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  scale_x_continuous(trans='log10',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
   theme(legend.position = 'top') +
-  ylab('Private ENPV')
+  ylab('Private ENPV improvement')
 )
 ```
-
-<div class="alert alert-danger">
-TODO: Following the last todo-note. The above can then be exchanged for an improvement plot.
-</div>
-
 
 ## Prizes and indirect ENPV
 In order to gauge the actual cost of how much a benefactor will have to pay when issuing a particular prize, we choose to compute ENPV.
