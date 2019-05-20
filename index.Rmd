@@ -1033,17 +1033,6 @@ finals %>%
 TODO: Change above to improvement in ENPV.
 </div>
 
-## Indirect ENPV and Private ENPV
-How much it costs the benefactor compared to how much it benefits the beneficiary.
-
-```{r, echo=FALSE}
-ggplot(finals, aes(y=enpv_prv_aft, x=-enpv_ind, color=intervention)) +
-  geom_point() +
-  facet_wrap(. ~ src, ncol=3) +
-  geom_smooth(method='lm', se=FALSE) +
-  coord_cartesian(xlim = c(0, 500), ylim = c(-25, 200)) +
-  ylab('Private ENPV') + xlab('-Indirect ENPV')
-```
 
 ## Prizes and go-decisions
 Assuming that a go-decision is reached in pre-clinical whenever private ENPV is greater than or equal to 0, we can use logistic regression to predict whether a particular prize size will yield a go or no-go decision.
