@@ -1029,10 +1029,6 @@ finals %>%
   xlab('Prize (log)') + ylab('-Indirect ENPV')
 ```
 
-<div class="alert alert-danger">
-TODO: Change above to improvement in ENPV.
-</div>
-
 
 ## Prizes and go-decisions
 Assuming that a go-decision is reached in pre-clinical whenever private ENPV is greater than or equal to 0, we can use logistic regression to predict whether a particular prize size will yield a go or no-go decision.
