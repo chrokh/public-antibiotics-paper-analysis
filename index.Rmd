@@ -21,6 +21,7 @@ output:
 
 ```{r, include=FALSE}
 knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
+set.seed(1)
 ```
 
 ```{r, libraries, include=FALSE}
@@ -47,7 +48,7 @@ The distribution of the stochastic project depends on the data set we're using, 
 Meaning that if one considers all the data sets at once then the number of random projects drawn is `N` multiplied with the number of data sets.
 
 ```{r}
-N = 1000
+N = 5000
 ```
 
 ## Sertkaya et. al (2014)
@@ -840,16 +841,15 @@ This intervention can be considered a generalization of what is commonly referre
 We implement the intervention as a function `intervene` as follows:
 
 ```{r}
-log10_sample <- function (min, max, magnitude_min, magnitude_max) {
-  runif(N, min, max) * (10 ^ runif(N, magnitude_min, magnitude_max))
+log10_sample <- function (n, min, max, magnitude_min, magnitude_max) {
+  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
 }
 
+prize_samples <- log10_sample(N, 1, 9.999, -1, 3) # Reuse intervention samples across phases
 intervene <- function (phases, target_phase, intervention_name) {
   data.frame(phases) %>%
     mutate(intervention = intervention_name,
-           prizes = ifelse(phase == target_phase,
-                           log10_sample(1, 9, 1, 3),
-                           prizes))
+           prizes = ifelse(phase == target_phase, prize_samples, 0))
 }
 ```
 
@@ -951,9 +951,13 @@ finals <- comparable_years %>%
          enpv_ind = tail(enpv_ind, n=1))
 ```
 
-## Prizes and private ENPV
-Before we proceed further, let us first ensure that the issued prizes (i.e. the interventions) actually do have an effect on private ENPV.
-As such there should be a correlation between prize size and private ENPV in all datasets.
+
+## Intervention effectiveness
+Determining the efficiency of an intervention means that we must take both its effectivess and its cost into consideration.
+We will measure effectiveness as the likelihood that a given intervention turns a pre-clinical no-decision into a go-decision, and we will measure cost as the previously computed indirect ENPV.
+
+Before we proceed further however, let us first ensure that the issued prizes (i.e. the interventions) actually do have an effect on private ENPV.
+As such there should be a correlation between prize size (of every intervention) and private ENPV in all datasets.
 
 ```{r, echo=FALSE}
 print(finals %>%
@@ -967,8 +971,12 @@ print(finals %>%
 )
 ```
 
-While correlation, the data seems more suitable to plot on a logarithmic scale.
-As some observations have negative ENPV however we instead choose to plot the improvement in private ENPV with and without the intervention.
+While clearly correlated, the data seems more suitable to plot on a logarithmic scale.
+However, since private ENPV sometimes is negative it is unsuitable for plotting on a log scale.
+By subtracting the private ENPV value before the application of the intervention from the private ENPV after the application of the intervention we get the improvement in private ENPV, i.e. the delta.
+This can be thought of as the absolute effect of the treatment.
+Since we're modeling non-dilutive prizes with no strings attached, the intervention will always improve private ENPV which means that the delta as a consequence always will be greater than zero.
+Intervention prize and private ENPV improvement also, expectedly, seem correlated.
 
 ```{r, echo=FALSE}
 print(finals %>%
@@ -977,15 +985,18 @@ print(finals %>%
   facet_wrap(. ~ intervention, ncol=3, scale='free') +
   xlab('Prize') +
   ylab('Private ENPV improvement') +
-  scale_x_continuous(trans='log10') +
-  scale_y_continuous(trans='log10') +
+  scale_x_continuous(trans='log10',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  scale_y_continuous(trans='log10',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
   theme(legend.position = 'top')
 )
 ```
 
-Intervention prize and private ENPV, expectedly, seem correlated.
-As other studies have shown, the later a prize is awarded, the higher the size must be to achieve a comparative increase in ENPV.
-This phenomena is clearly visible in our model when plotting the correlation between prize size and private ENPV for all interventions on the same scale.
+Other studies have shown, that the later a prize is awarded, the higher the size of the prize must be to achieve a comparative increase in ENPV.
+This phenomena is clearly visible in our model when plotting the correlation between prize size and private ENPV improvement for all interventions on the same scale.
 
 ```{r, echo=FALSE, warning=FALSE}
 print(finals %>%
@@ -1006,9 +1017,121 @@ print(finals %>%
 # TODO: This plot yields warnings
 ```
 
-## Prizes and indirect ENPV
-In order to gauge the actual cost of how much a benefactor will have to pay when issuing a particular prize, we choose to compute ENPV.
-This metric takes both the opportunity cost (cost of capital) and risk of a project into consideration.
+Let us now move to estimating the interventions' improvement on pre-clinical go-decisions.
+We assume that a pre-clinical go-decision will be reached if ENPV upon entering pre-clinical is at or above zero, and a no-decision is reached if not.
+
+```{r}
+finals$go <- factor(finals$enpv_prv_aft >= 0)
+```
+
+If we jitter plot prize size on the x-axis and the binary go-decision on the y-axis, we (expectedly) observe that as prizes increase, initial no-decisions are eventually turned into go-decisions.
+If we look closely we even see that the range of prizes that turns no's into go's seems to be higher in later phases and lower in earlier.
+This is of course also expected since we've already established that late-phase prizes must be higher to achieve an ENPV improvement comparable to early-phase prizes.
+
+```{r, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, go, color=intervention)) +
+  geom_jitter(shape=1) +
+  facet_grid(cols=vars(src), rows=vars(intervention)) +
+  theme(legend.position = 'none') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4)))
+```
+
+The analysis above is however also diffused by the fact that we are not differentiating between turning a no-decision into a go-decision and simply paying money to a project that already faced a go-decision.
+Let us focus in on projects that faced an initial no-decision.
+
+```{r}
+nos <- filter(finals, enpv_prv_bef < 0)
+```
+
+Running the same plot on the new subset we get a clearer picture of when no's actually are turned into go's.
+
+```{r, echo=FALSE}
+nos %>%
+  ggplot(aes(prizes, go, color=intervention)) +
+  geom_jitter(shape=1) +
+  facet_grid(cols=vars(src), rows=vars(intervention)) +
+  theme(legend.position = 'none') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4)))
+```
+
+To more properly understand at what ranges the different interventions have their effects we can build a logistic regression model where prize size predicts no/go:
+
+```{r}
+go_model <- glm(
+  go ~ prizes * interaction(src, intervention),
+  data = nos,
+  family = binomial(link='logit'))
+```
+
+and then use that model to predict the probability of a particular prize yielding a go- as opposed to a no-decision.
+We will also refer to this as the go-rate of an intervention.
+
+```{r}
+nos$go_pred_prize <- predict(go_model, type='response')
+```
+
+With this we can more clearly reason about the prize sizes at which the interventions actually have their effects.
+In other words we can now reason about the probability of a particular prize size turning a no-decision into a go-decision.
+We now clearly see how late-phase prizes must be substantially higher to have the same probability of yielding go-decisions as early-phase prizes.
+
+```{r, echo=FALSE}
+nos %>%
+  ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  xlab('Prize (log)') + ylab('Probability of no -> go') +
+  facet_wrap(. ~ src)
+```
+
+When filtering out projects that already faced go-decisions we notice that a plethora of projects already faced go-decisions even without intervention.
+Many (the author included) have suggested that prizes should be coupled with profitability analyses in order to avoid wasteful spending of public resources.
+However, such a filtering process is likely to be prohibitively difficult in reality.
+And even if conducted, the incentive for developers to "rig" the numbers and bend the truth is substantial.
+Granting prizes to developers with projects that would have been pursued regardless of the existance of the prize is consequently assumed to be an unfortunate but possibly unavoidable reality.
+
+Under this assumption we cannot employ the "cleaner" no-to-go model but must use all the data and use prize size to predict go-decisions in the existance of the noise caused by projects facing go-decisions irrespectively.
+
+```{r}
+mod <- glm(
+  go ~ prizes * interaction(src, intervention),
+  data = finals,
+  family = binomial(link='logit'))
+finals$go_pred_prize <- predict(mod, type='response')
+```
+
+```{r, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)),
+                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  xlab('Prize (log)') + ylab('Probability of go-decision') +
+  facet_wrap(. ~ src)
+```
+
+While this works, the "starting point" is now closer to the baseline probability of a go-decision without an intervention rather than closer to 0.
+Presumably this second model also explains less of the variance.
+
+<div class="alert alert-danger">
+TODO: Report variance explained (maybe r squared?) for the two models.
+</div>
+
+
+
+## Intervention cost
+While we now have a way of determining the effectiveness of a given prize, we must combine that information with its cost in order to determine its efficiency.
+In order to gauge the actual cost of how much a benefactor will have to pay when issuing a particular prize, we choose to compute ENPV from the perspective of the payer.
+We call this "indirect ENPV", and it can be thought of as the expected, capitalized cost of issuing the intervention publicly and then paying for every successful candidate without receiving any financial return whatsoever.
+
+Specifically, the metric takes both the opportunity cost (cost of capital) and risk of a project into consideration.
 Taking opportunity cost into consideration is important as the benefactor looses the opportunity to activate their money elsewhere when making a payment to a beneficiary.
 Taking risk into consideration is important as the benefactor will not necessarily pay the promised prize size, due to projects being highly risky.
 We will now explore the correlation between prize size and the negative ENPV for the benefactor.
@@ -1017,7 +1140,7 @@ Note that ENPV for the benefactor necessarily will be negative as the prize payo
 ```{r, echo=FALSE}
 finals %>%
   ggplot(aes(prizes, -enpv_ind, color=intervention)) +
-  geom_point() +
+  geom_point(shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=3) +
   scale_x_continuous(trans = 'log',
@@ -1029,55 +1152,75 @@ finals %>%
   xlab('Prize (log)') + ylab('-Indirect ENPV')
 ```
 
+However, since not all projects will reach a go-decision, we cannot compute the indirect cost as simply the expected cost of the intervention given the project's probabilities, but must instead compute the expected cost of the intervention given the project's probabilities and the owner's decision of whether to pursuit it or not.
+In other words, an intervention will not have to fund projects ran by owners that choose to terminate their projects, and consequently never reach the prize point.
 
-## Prizes and go-decisions
-Assuming that a go-decision is reached in pre-clinical whenever private ENPV is greater than or equal to 0, we can use logistic regression to predict whether a particular prize size will yield a go or no-go decision.
-We first compute go-decisions:
-```{r}
-finals$go <- factor(finals$enpv_prv_aft >= 0, levels=c(TRUE, FALSE))
-```
+Again, assuming that a pre-clinical go-decision is reached if ENPV after the introduction of the intervention is greater than or equal to 0, we can filter and keep only observations where we've reached a go-decision and plot again.
+While paying for substantially fewer projects when issuing lower prizes, we still observe the same "stacking" of the interventions as we did before removing non-go projects.
 
-then construct the model and use it to predict values as follows:
-```{r}
-prize_model <- glm(data = finals,
-             go ~ prizes * interaction(src, intervention),
-             family = binomial(link='logit'))
-finals$pred_go_prize <- predict(prize_model, type='response')
-```
-
-Finally, we can plot the predicted decision against different prize sizes.
 ```{r, echo=FALSE}
 finals %>%
-  ggplot(aes(prizes, (1-pred_go_prize)*100, color=intervention)) +
-  geom_line() +
+  filter(enpv_prv_aft > 0) %>%
+  ggplot(aes(prizes, -enpv_ind, color=intervention)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE) +
+  facet_wrap(. ~ src, ncol=3) +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:4)),
                      minor_breaks = c(1:9 %o% 10^(0:4))) +
-      xlab('Prize (log)') + ylab('Probability of go-decision') +
-      facet_wrap(. ~ src, ncol=3)
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:3)),
+                     minor_breaks = c(1:9 %o% 10^(0:3))) +
+  xlab('Prize (log)') + ylab('-Indirect ENPV')
 ```
 
+In summary, later interventions must be larger to achieve yield a private ENPV improvements comparable to earlier interventions, but if we disregard this difference in ENPV improvement then later interventions are cheaper for the benefactor than earlier ones of the same size.
+Such a simplification is unfortunately unacceptable as the purpose of an indirect intervention is to improve private ENPV to a point where no-decisions are turned into go-decisions.
 
-## Indirect ENPV and go-decisions
-In the same fashion, we can construct a model that predicts go-decisions from the benefactor's ENPV.
 
-```{r}
-benf_model <- glm(data=finals,
-             go ~ enpv_ind * interaction(src, intervention),
-             family=binomial(link='logit'))
-finals$pred_go_benf <- predict(benf_model, type='response')
-```
+## Intervention efficiency
+To estimate an intervention's efficiency we must consider both its effectiveness and its cost.
+More specifically we must compute its cost per unit of effect.
+As argued above, we will use the full dataset that includes projects that would have reached go-decisions irrespective of the existance of an intervention as ignore them would systematically skew the data.
 
-This can help us understand how much the benefactor will have to spend in order to achieve a particular go-decision probability.
+We will however only look at go-rates lower than `r go_lim_up = 0.99; go_lim_up*100`%.
+Since a go-rate higher than 100% is not achievable, any prize size larger than the lowest size that yields a go-rate of 100% will also merely yield 100%.
+
 ```{r, echo=FALSE}
 finals %>%
-  ggplot(aes(-enpv_ind, (1-pred_go_benf)*100, color=intervention)) +
-  geom_line() +
-  scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
-      xlab('-Indirect ENPV (log)') + ylab('Probability of go-decision') +
-      facet_wrap(. ~ src, ncol=3)
+  filter(go_pred_prize < go_lim_up) %>%
+  ggplot(aes(go_pred_prize*100, -enpv_ind, color=intervention)) +
+  geom_point(shape=1) +
+  #geom_smooth() +
+  #scale_x_continuous(trans = 'log',
+  #                   breaks = c(1 %o% 10^(0:4)),
+  #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
+  #scale_y_continuous(trans = 'log',
+  #                   breaks = c(1 %o% 10^(0:4)),
+  #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
+  xlab('Probability of go-decision (%)') +
+  ylab('Inverse indirect ENPV') +
+  theme(legend.position='none') +
+  facet_grid(cols=vars(intervention), rows=vars(src))
+```
+
+Using local regression (loess) we can see that the interventions again seem to "stack".
+
+```{r, echo=FALSE}
+finals %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  ggplot(aes(go_pred_prize*100, -enpv_ind, color=intervention)) +
+  geom_smooth(method='loess', se=FALSE) +
+  #scale_x_continuous(trans = 'log',
+  #                   breaks = c(1:9 %o% 10^(0:4)),
+  #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
+  #scale_y_continuous(trans = 'log',
+  #                   breaks = c(1 %o% 10^(0:4)),
+  #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
+  facet_wrap(. ~ src) +
+  xlab('Probability of go-decision (%)') +
+  ylab('Inverse indirect ENPV') +
+  theme(legend.position = 'top')
 ```
 
 # Conclusion
