@@ -40,8 +40,7 @@ Direct funding is here used to mean that a benefactor pays for antibiotics R&D a
 Indirect funding is here used to mean that a benefactor issues non-dilutive prizes to whoever completes a particular phase, with the intent of incentivizing private developers to undertake said and prior phases.
 This analysis is attempting to estimate which of the two options would be cheaper, ceteris paribus, for the benefactor.
 
-# Simulation and input data set
-
+# Input data and simulation
 Let us begin by setting `N` to the number of samples that we want per data set.
 This number represents the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
@@ -163,7 +162,7 @@ driveab2018$src <- 'DRIVE-AB (2018)'
 ```
 
 
-## Combining all datasets
+## Additional parameters
 Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
 
 ```{r}
@@ -197,22 +196,29 @@ phases$prizes <- 0
 phases$intervention <- 'NONE'
 ```
 
-Finally, let us add a "public discount rate".
+Let us add a "public" or "social" discount rate.
 Meaning the cost of capital for the benefactor, i.e. for the body that pays the intervention with no expectation of monetary return.
 This parameter is used in the analysis, where its raison d'etre is also further explained.
 
 ```{r}
 publ_dr_min = 0.035
 publ_dr_max = 0.045
+phases$discount_rate_publ <- runif(N, publ_dr_min, publ_dr_max)
 ```
 
 We assume that the benefactor is the public sector and use a uniformly distributed discount rate between `r publ_dr_min * 100`% and `r publ_dr_max * 100`%.
 Public discount rate varies across subjects but not within.
 The same subject has the same public discount rate across all datasets (i.e. sources).
 
+In the analysis we will also explore the effect of various levels of public sector inefficiency.
+The assumptions are explained in further detail in the analysis section.
+In most of the calculations, the inefficiency parameter is ignored, and when used we will control for it.
+As such, we can explore a wide range of inefficiencies.
+
 ```{r}
-phases$discount_rate_publ <- runif(N, publ_dr_min, publ_dr_max)
+phases$inefficiency <- runif(N, 0, 5)
 ```
+
 
 ## Summary statistics
 Let us plot the phase parameters as frequency polygons (i.e. histograms) for each of the sources.
@@ -408,7 +414,7 @@ TODO: Verify that the probability portion of ENPV is actually computed according
 # Valuation methods
 To compute valuation metrics for a given project we must make an assumption as to how a hypothetical evaluator chooses to transform a sequence of discrete phases into a sequence of discrete and uncertain cashflows.
 We make the assumption that the evaluator converts every phase into a series of years in order to properly discount the cashflow of the given phase.
-This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.s when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
+This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
 To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
 
 
@@ -603,6 +609,7 @@ to_years <- function (phases) {
                    t = phases$t + x - 1,
                    phase = phases$phase,
                    discount_rate_publ = phases$discount_rate_publ,
+                   inefficiency = phases$inefficiency,
                    cost,
                    sales,
                    prizes,
@@ -899,11 +906,6 @@ We will compare these two different approaches by comparing their expected costs
 We assume that the valuation metric that private actors employ is ENPV and that the valuation method is yearly.
 We will refer to this value as *private ENPV.*
 
-```{r, echo=FALSE}
-public_discount_rate_min = 0.035
-public_discount_rate_max = 0.045
-```
-
 In order to reason about the cost for the benefactor of issuing a prize we will compute the necessarily negative ENPV of issuing said prize.
 ENPV is an appropriate measure, since the prize is probabilistically issued in the future.
 As previously described, we assume that the benefactor is the public sector and employ a uniformly distributed discount rate between `r publ_dr_min * 100`% and `r publ_dr_max * 100`%.
@@ -924,14 +926,15 @@ comparable_years <- comparable_years %>%
   arrange(t) %>%
   group_by(src, subject, intervention) %>%
   mutate(
+         tot_prob = prod(prob),
          prob_to = cumprod(prob) / prob, # TODO: Is this correct?
          intervention_size = sum(prizes),
          cashflow_bef = sales - cost,
          cashflow_aft = sales - cost + prizes,
          enpv_prv_bef = cumsum((cashflow_bef / ((1 + discount_rate_priv) ^ t)) * prob_to),
          enpv_prv_aft = cumsum((cashflow_aft / ((1 + discount_rate_priv) ^ t)) * prob_to),
-         enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to),
          enpv_ind = cumsum((-prizes / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to)
          ) %>%
   select(-prob_to)
 ```
@@ -941,17 +944,19 @@ We extract the different ENPV values from the perspective of pre-clinical, like 
 ```{r}
 finals <- comparable_years %>%
   arrange(t) %>%
-  group_by(src, subject, intervention) %>%
+  group_by(src, subject, intervention, inefficiency, tot_prob) %>%
+  # TODO: This is basically "last row per group". Refactor!
   summarise(
          prizes = sum(prizes),
          enpv_prv_bef = tail(enpv_prv_bef, n=1),
          enpv_prv_aft = tail(enpv_prv_aft, n=1),
-         enpv_dir = tail(enpv_dir, n=1),
-         enpv_ind = tail(enpv_ind, n=1))
+         enpv_ind = tail(enpv_ind, n=1),
+         enpv_dir = tail(enpv_dir, n=1)
+         )
 ```
 
 
-## Intervention effectiveness
+## Indirect: effectiveness
 Determining the efficiency of an intervention means that we must take both its effectivess and its cost into consideration.
 We will measure effectiveness as the likelihood that a given intervention turns a pre-clinical no-decision into a go-decision, and we will measure cost as the previously computed indirect ENPV.
 
@@ -1125,7 +1130,7 @@ TODO: Report variance explained (maybe r squared?) for the two models.
 
 
 
-## Intervention cost
+## Indirect: cost
 While we now have a way of determining the effectiveness of a given prize, we must combine that information with its cost in order to determine its efficiency.
 In order to gauge the actual cost of how much a benefactor will have to pay when issuing a particular prize, we choose to compute ENPV from the perspective of the payer.
 We call this "indirect ENPV", and it can be thought of as the expected, capitalized cost of issuing the intervention publicly and then paying for every successful candidate without receiving any financial return whatsoever.
@@ -1148,7 +1153,7 @@ finals %>%
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:3)),
                      minor_breaks = c(1:9 %o% 10^(0:3))) +
-  xlab('Prize (log)') + ylab('-Indirect ENPV')
+  xlab('Prize (log)') + ylab('-Indirect ENPV per entry (including terminations)')
 ```
 
 However, since not all projects will reach a go-decision, we cannot compute the indirect cost as simply the expected cost of the intervention given the project's probabilities, but must instead compute the expected cost of the intervention given the project's probabilities and the owner's decision of whether to pursuit it or not.
@@ -1170,14 +1175,14 @@ finals %>%
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:3)),
                      minor_breaks = c(1:9 %o% 10^(0:3))) +
-  xlab('Prize (log)') + ylab('-Indirect ENPV')
+  xlab('Prize (log)') + ylab('-Indirect ENPV per entry')
 ```
 
 In summary, later interventions must be larger to achieve yield a private ENPV improvements comparable to earlier interventions, but if we disregard this difference in ENPV improvement then later interventions are cheaper for the benefactor than earlier ones of the same size.
 Such a simplification is unfortunately unacceptable as the purpose of an indirect intervention is to improve private ENPV to a point where no-decisions are turned into go-decisions.
 
 
-## Intervention efficiency
+## Indirect: efficiency
 To estimate an intervention's efficiency we must consider both its effectiveness and its cost.
 More specifically we must compute its cost per unit of effect.
 As argued above, we will use the full dataset that includes projects that would have reached go-decisions irrespective of the existance of an intervention as ignoring them would systematically skew the data.
@@ -1197,8 +1202,8 @@ finals %>%
   #scale_y_continuous(trans = 'log',
   #                   breaks = c(1 %o% 10^(0:4)),
   #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
-  xlab('Probability of go-decision (%)') +
-  ylab('Inverse indirect ENPV') +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('-Indirect ENPV per entry') +
   theme(legend.position='none') +
   facet_grid(cols=vars(intervention), rows=vars(src))
 ```
@@ -1218,45 +1223,115 @@ finals %>%
   #                   breaks = c(1 %o% 10^(0:4)),
   #                   minor_breaks = c(1:9 %o% 10^(0:4))) +
   facet_wrap(. ~ src) +
-  xlab('Probability of go-decision (%)') +
-  ylab('Inverse indirect ENPV') +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('-Indirect ENPV per entry') +
   theme(legend.position = 'top')
 ```
 
-
-## Comparing indirect and direct
 To tackle the question of whether paying directly or indirectly is preferable, we must compare the above indirect ENPVs to the direct ENPV of simply paying for the project at-cost.
-We begin by computing the difference between indirect ENPV and direct ENPV and again plot that for every go-rate (i.e. for every prize, expressed as a probability of go-decision).
-Note that at lower go-rates the difference is less but at higher go-rates the difference is greater than zero.
-This suggests that whether direct or indirect funding is cheaper, depends on what go-rate you want to achieve.
-This is unsuprising since direct funding by definition entails a go-rate of 100%.
-Using loess smoothing we again clearly observe the "layering" of the interventions.
+Above, we have however computed the expected cost per pre-clinical entry.
+While a perfectly valid statistic it cannot sensibly be compared against the expected cost of direct funding since the output, i.e. the probability of any given entry becoming an exit, actually varies.
+
+When directly funding antibiotics, projects may be terminated at the discretion of the benefactor, but when indirectly funding they may be terminated at the discretion of the project owner.
+So to make an "apples to apples" comparison of indirect and direct we would only be able to compare indirect prize sizes that yield go-rates of approximately 100%.
+Only then would every input project into pre-clinical stand an equivalent chance of making it through to the market regardless of whether directly or indirectly funded, and only then could we compare the prize per entry.
+
+Given that we however want to explore various go-rates we will hereon move from computing the expected cost per entry to computing the expected cost per exit.
+Specifically, the expected, capitalized cost per market approval.
+In other words, while we have analyzed the cost per unit of input, we will now move to analyzing the cost per unit of output.
 
 ```{r, echo=FALSE}
 finals %>%
   filter(go_pred_prize < go_lim_up) %>%
-  ggplot(aes(go_pred_prize*100, enpv_dir-enpv_ind, color=intervention)) +
-  geom_point(shape=1) +
-  geom_hline(aes(yintercept=0)) +
-  facet_grid(rows=vars(src), cols=vars(intervention)) +
-  #facet_wrap(. ~ src) +
-  xlab('Probability of go-decision (%)') +
-  ylab('Indirect minus direct (i.e. ENPV savings by paying directly)') +
-  theme(legend.position = 'top')
-
-finals %>%
-  filter(go_pred_prize < go_lim_up) %>%
-  ggplot(aes(go_pred_prize*100, enpv_dir-enpv_ind, color=intervention)) +
+  ggplot(aes(go_pred_prize*100, -enpv_ind/tot_prob, color=intervention)) +
   geom_smooth(method='loess', se=FALSE) +
-  geom_hline(aes(yintercept=0)) +
   facet_wrap(. ~ src) +
-  xlab('Probability of go-decision (%)') +
-  ylab('Indirect minus direct (i.e. ENPV savings by paying directly)') +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('Indirect ENPV per exit') +
   theme(legend.position = 'top')
 ```
 
-The above comparison however, assumes that the public and the private sector are equally efficient.
-We will therefore now explore how this cost difference vary under various reductions in public sector efficiency.
+For indirect funding, the cost per output curve is shaped similarly to the cost per input curve.
+Importantly however, costs are significantly higher (see y-axis), since we now have to take the technical failure rate into consideration.
+Higher go-rates still cause the bottom line, i.e. the cost per output, to be more expensive than lower go-rates.
+However, whether our public health system can afford a lower go-rate depends greatly on the rate of discovery, i.e. on the entry rate into pre-clinical, and is a gravely important question outside the scope of this study.
+Irrespectively, this figure can be used to estimate how much we will "actually" pay for every new antibiotic when using this form of indirect funding, when choosing to accept a particular go-rate (i.e. chance of any given project reaching a go-decision in pre-clinical).
+
+
+
+## Direct: efficiency
+There is no need to analyze the effectiveness of direct funding in terms of go-decisions seeing that the core idea of direct funding is to move no-/go-decisions into the hands of the benefactor.
+While in reality, the benefactor may strategically choose not to pursue all opportunities we will for the sake of calculation assume that all opportunities are pursued.
+Direct funding can thus be thought of as having the same effect (in terms of go-rate) as a go-rate of approximately 100%.
+However, to compute the efficiency of direct funding, so that we can compare it to the efficiency of indirect funding, we must identify the cost of direct funding.
+
+We begin by applying the sampled inefficiencies to our original dataset, and then converting the resulting dataset into the same year-based format used for the analysis of indirect funding.
+We assume that public sector inefficiencies have detrimental effects on development costs and times but not probabilities of success.
+In other words, we assume that the likelihood of succeeding in turning a hypothetical NCE into a market ready antibiotic is the same for both the public and the private sector (costs and development times aside).
+In even other words, we assume that the public sector eventually get to the point that the private do.
+But the time it takes the public sector to get there may be longer and during that time they may accumulate a higher cost.
+
+We model this inefficiency as an "efficiency factor" that increases costs and times, while reducing probabilities.
+If the efficiency factor, e.g. is 75% then a cost of 10 million will be transformed into a cost of 17.5 million, because 10 \* (1 + 0.75) = 17.5.
+
+```{r}
+inefficient <- phases %>%
+  mutate(cost = cost * (1 + inefficiency),
+         time = time * (1 + inefficiency))
+inefficient_years <- to_years(inefficient)
+```
+
+We then compute the ENPV of directly funding each individual project:
+
+```{r}
+inefficient_years <- inefficient_years %>%
+  arrange(t) %>%
+  group_by(src, subject, inefficiency) %>%
+  mutate(
+         tot_cost = sum(cost),
+         tot_prob = prod(prob),
+         prob_to = cumprod(prob) / prob, # TODO: Is this correct?
+         enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ t)) * prob_to),
+         ) %>%
+  select(-prob_to)
+```
+
+and extract the ENPVs of taking each project from pre-clinical to market.
+
+```{r}
+inefficient_finals <- inefficient_years %>%
+  arrange(t) %>%
+  group_by(src, subject, inefficiency, tot_prob, tot_cost) %>%
+  summarise(enpv_dir = tail(enpv_dir, n=1))
+```
+
+Finally we can plot the expected cost (in terms of ENPV) per pre-clinical entry of directly funding each project without any financial returns.
+When exploring direct funding we're not plotting cost against the go-rate of a prize size but instead aginst different public sector inefficiencies.
+
+```{r, echo=FALSE}
+inefficient_finals %>%
+  ggplot(aes(inefficiency*100, -enpv_dir, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('-Direct ENPV per entry') +
+  theme(legend.position='none')
+```
+
+Just as with the cost of indirect funding, we can also convert the cost per entry to a cost per exit.
+
+```{r, echo=FALSE}
+inefficient_finals %>%
+  ggplot(aes(inefficiency*100, -enpv_dir/tot_prob, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('-Direct ENPV per output') +
+  theme(legend.position='none')
+```
+
 
 # Conclusion
 What's the qualitative value-add of stimulating private developers and entrepreneurs that isn't captured in this analysis?
