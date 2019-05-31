@@ -216,7 +216,7 @@ In most of the calculations, the inefficiency parameter is ignored, and when use
 As such, we can explore a wide range of inefficiencies.
 
 ```{r}
-phases$inefficiency <- runif(N, 0, 5)
+phases$inefficiency <- runif(N, 0, 3)
 ```
 
 
@@ -1265,6 +1265,10 @@ While in reality, the benefactor may strategically choose not to pursue all oppo
 Direct funding can thus be thought of as having the same effect (in terms of go-rate) as a go-rate of approximately 100%.
 However, to compute the efficiency of direct funding, so that we can compare it to the efficiency of indirect funding, we must identify the cost of direct funding.
 
+<div class="alert danger">
+TODO: Actually we need to analyze effectiveness. Think: attrition rate but for time. Go-rate + probability = how many outputs per entry. But go-rate + probability + time = time until output per entry.
+</div>
+
 We begin by applying the sampled inefficiencies to our original dataset, and then converting the resulting dataset into the same year-based format used for the analysis of indirect funding.
 We assume that public sector inefficiencies have detrimental effects on development costs and times but not probabilities of success.
 In other words, we assume that the likelihood of succeeding in turning a hypothetical NCE into a market ready antibiotic is the same for both the public and the private sector (costs and development times aside).
@@ -1332,6 +1336,63 @@ inefficient_finals %>%
   theme(legend.position='none')
 ```
 
+
+## Comparison
+To compare our indirect intervention (non-dilutive prizes) with direct funding, we must compare the efficiency of both approaches.
+Since the private sector does not always choose to pursuit all projects, we must be careful with comparing the efficiency of directly funding all projects with that of indirectly funding only those that reach a go-decision.
+Since a systematically different set of projects reach private go-decisions under a given prize size, the average cost per output is not really representative of the average cost per output of funding all projects directly (since the private sector pressumably have dropped e.g. some of the most expensive and time-consuming projects).
+
+When comparing the cost per exit of indirect funding with direct funding, we will therefore only compute the cost of directly fund those particular projects that reached a go-decision under the given indirect funding scheme.
+It is important to remeber however that even though we are comparing the cost of pursuing the same projects there are still at least two important uncaptured differences between the approaches:
+(1) Direct funding would have a different cost (which is reported in the direct-specific analysis section above) and hence go-rate if we chose to pursuit all projects.
+(2) Public inefficiencies does not only alert the cost of direct funding but also the amount of time it takes for new antibiotics to reach market.
+
+With these two caveats in mind, we begin by combining the direct dataset and the indirect dataset, and compute the difference in cost for every given go-ratio/inefficiency pair.
+
+<div class="alert alert-danger">
+TODO: Actually, not filtering doesn't seem to change anything in the output plot so maybe this isn't logically necessary since we're not looking at go-decisions apart from the go-rate. This needs to be better understood and explained.
+</div>
+
+```{r}
+indirect <- finals %>% ungroup %>%
+  select(src, subject, intervention, tot_prob, enpv_ind, go_pred_prize, enpv_prv_aft) %>%
+  rename(prob_ind = tot_prob)
+
+direct <- inefficient_finals %>% ungroup %>%
+  select(src, subject, tot_prob, enpv_dir, inefficiency) %>%
+  rename(prob_dir = tot_prob)
+
+both <- inner_join(indirect, direct, by=c('src', 'subject')) %>%
+  mutate(enpv_ind_per_exit = enpv_ind/prob_ind,
+         enpv_dir_per_exit = enpv_dir/prob_dir,
+         diff = (-enpv_dir_per_exit) - (-enpv_ind_per_exit)) %>%
+  filter(go_pred_prize < 0.99)
+```
+
+Then filter out all projects that did not reach a go-decision under the given prize size, and build a linear model that predicts the cost difference between indirect and direct funding from public inefficiency and go-ratio.
+
+```{r}
+both_go <- both %>% filter(enpv_prv_aft >= 0)
+mod_diff <- glm(diff ~ go_pred_prize * inefficiency * src * intervention, data=both_go)
+both_go$diff_pred <- predict(mod_diff, type='response')
+```
+
+In the plot below, green indicates that indirect funding (i.e. stimulating private developers) on average is cheaper, white that they are equivalent, and red that direct funding (publicly funding development) on average is cheaper.
+
+```{r, echo=FALSE}
+both_go %>%
+  ggplot(aes(
+    round(go_pred_prize*100/5)*5,
+    round(inefficiency*100/40)*40,
+    fill=diff_pred)) +
+  scale_fill_gradient2(high='darkgreen', mid='white', low='red', midpoint=0) +
+  geom_raster(interpolate=FALSE) +
+  facet_grid(rows=vars(src), cols=vars(intervention)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  xlab('Prize size yielding probability of go-decision (%)') +
+  ylab('Public inefficiency (%)') +
+  theme(legend.position='none')
+```
 
 # Conclusion
 What's the qualitative value-add of stimulating private developers and entrepreneurs that isn't captured in this analysis?
