@@ -1394,5 +1394,54 @@ both_go %>%
   theme(legend.position='none')
 ```
 
+These levelplots give an indication of the overall relationship between direct and indirect funding for various levels of go-ratio yielding prize sizes and public inefficiencies.
+However, it contains no obvious information on how much cheaper or more expensive a given configuration is.
+
+To allow determining the cost differences under various configurations we can simply plot the two previous efficiency plot side-by-side with aligned y-axes.
+It is important to note however that in this plot we cannot compute the cost of directly funding only the projects that receive a go-decision, since to identify which projects reach a go-decision we must pair the inefficiency with a prize size.
+Consequently, in the rightmost facet of the plot below we are looking at the cost per output/exit when directly funding every project that enters pre-clinical.
+As stated before, this can be thought of as a go-rate of 100%.
+
+Whether the direct or the indirect strategy will yield more projects per time unit is an alltogether different question left unanswered.
+To approach that we would have to consider the reduced time efficiency of the direct approach and compare to the reduced go-rate of the indirect approach.
+
+```{r, echo=FALSE, warning=FALSE}
+# TODO: This plot yields lots of errors that I've supressed!
+for (curr in sources) {
+  sub <- both_go %>%
+    filter(src == curr) %>%
+    filter(go_pred_prize < go_lim_up)
+
+  p1 <- sub %>%
+    ggplot(aes(go_pred_prize*100, -enpv_ind_per_exit, color=intervention)) +
+    geom_smooth(method='loess', se=FALSE) +
+    facet_wrap(. ~ src) +
+    xlab('Prob of go-decision (%) under prize size') +
+    ylab('-Indirect ENPV per exit') +
+    theme(legend.position = 'left') +
+    ggtitle('Indirect funding')
+
+  yscale <- layer_scales(p1, 1, 1)$y$range$range
+
+  p2 <- inefficient_finals %>%
+    filter(src == curr) %>%
+    ggplot(aes(inefficiency*100, -enpv_dir/tot_prob, color=src)) +
+    #geom_point(shape=1) +
+    geom_smooth(method='lm', se=FALSE, color='black') +
+    facet_wrap(. ~ src) +
+    xlab('Public inefficiency (%)') +
+    ylab('-Direct ENPV per exit') +
+    scale_y_continuous(
+      position='right',
+      limits=c(min(yscale), max(yscale))) +
+    theme(axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    ggtitle('Direct funding')
+
+  print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
+}
+```
+
+
 # Conclusion
 What's the qualitative value-add of stimulating private developers and entrepreneurs that isn't captured in this analysis?
