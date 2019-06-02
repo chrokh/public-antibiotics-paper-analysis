@@ -1418,6 +1418,8 @@ for (curr in sources) {
     facet_wrap(. ~ src) +
     xlab('Prob of go-decision (%) under prize size') +
     ylab('-Indirect ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
     theme(legend.position = 'left') +
     ggtitle('Indirect funding')
 
@@ -1431,11 +1433,11 @@ for (curr in sources) {
     facet_wrap(. ~ src) +
     xlab('Public inefficiency (%)') +
     ylab('-Direct ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
     scale_y_continuous(
+      breaks = scales::pretty_breaks(n = 8),
       position='right',
       limits=c(min(yscale), max(yscale))) +
-    theme(axis.text.y=element_blank(),
-          axis.ticks.y=element_blank()) +
     ggtitle('Direct funding')
 
   print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
