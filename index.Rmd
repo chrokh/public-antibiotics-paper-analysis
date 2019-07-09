@@ -31,6 +31,7 @@ library(ggplot2)
 library(gridExtra)
 library(ggpubr)
 library(triangle)
+library(scales)
 ```
 
 # Introduction
@@ -63,24 +64,24 @@ The points of differentiation are outlined as comments in the code chunk below.
 pc <- data.frame(
   phase = 'PC',
   time  = runif(N, min=4.3, max=6),
-  cost  = runif(N, min=19, max=23.2),
+  cost  = runif(N, min=19, max=23.2) * 10^6,
   prob  = runif(N, min=0.175, max=0.69),
   sales = 0)
 p1 <- data.frame(
   phase = 'P1',
   time  = runif(N, min=0.75, max=1.8),
   prob  = runif(N, min=0.25, max=0.837),
-  cost  = runif(N, min=7.3, max=12),
+  cost  = runif(N, min=7.3, max=12) * 10^6,
   sales = 0)
 p2 <- data.frame(
   phase = 'P2',
   time  = runif(N, min=0.75, max=2.5),
-  cost  = runif(N, min=7.12, max=18.72),
+  cost  = runif(N, min=7.12, max=18.72) * 10^6,
   prob  = runif(N, min=0.34, max=0.74),
   sales = 0)
 p3 <- data.frame(
   phase = 'P3',
-  cost  = runif(N, min=26.88, max=121.68),
+  cost  = runif(N, min=26.88, max=121.68) * 10^6,
   prob  = runif(N, min=0.314, max=0.786),
   time  = runif(N, min=0.83, max=3.9),
   sales = 0)
@@ -88,14 +89,14 @@ p4 <- data.frame(
   phase = 'P4',
   time  = runif(N, min=0.5, max=1.04),
   prob  = runif(N, min=0.83, max=0.99),
-  cost  = 98.297168,
+  cost  = 98.297168 * 10^6,
   sales = 0)
 mp <- data.frame(
   phase = 'MP',
   time  = 10,
   prob  = 1,
   cost  = 0,
-  sales = runif(N, min=218, max=2500))
+  sales = runif(N, min=218, max=2500) * 10^6)
 
 # Combine all phases into single dataset
 sertkaya2014 <- rbind(pc, p1, p2, p3, p4, mp)
@@ -116,39 +117,39 @@ Some deviations (reported as comments in the code chunk below) have been made as
 pc <- data.frame(
   phase = 'PC',
   time  = rtriangle(N, 4.33, 6, 5.5),
-  cost  = rtriangle(N, 14.25, 29, 21.1),
+  cost  = rtriangle(N, 14.25, 29, 21.1) * 10^6,
   prob  = rtriangle(N, 0.175, 0.69, 0.352),
   sales = 0)
 p1 <- data.frame(
   phase = 'P1',
   time  = rtriangle(N, 0.75, 1.8, 0.875),
   prob  = rtriangle(N, 0.25, 0.837, 0.33),
-  cost  = rtriangle(N, 13.1, 37.96, 24),
+  cost  = rtriangle(N, 13.1, 37.96, 24) * 10^6,
   sales = 0)
 p2 <- data.frame(
   phase = 'P2',
   time  = rtriangle(N, 0.75, 2.5, 1.08),
   prob  = rtriangle(N, 0.34, 0.74, 0.5),
-  cost  = rtriangle(N, 4.55, 46.36, 12.95), # TODO: Cost is incorrectly reported in DRIVE-AB report!
+  cost  = rtriangle(N, 4.55, 46.36, 12.95) * 10^6, # TODO: Cost is incorrectly reported in DRIVE-AB report!
   sales = 0)
 p3 <- data.frame(
   phase = 'P3',
   time  = rtriangle(N, 0.83, 3.83, 1.82),
   prob  = rtriangle(N, 0.314, 0.786, 0.67),
-  cost  = rtriangle(N, 10, 47, 21.8),
+  cost  = rtriangle(N, 10, 47, 21.8) * 10^6,
   sales = 0)
 p4 <- data.frame(
   phase = 'P4',
   time  = rtriangle(N, 0.5, 1.04, 0.75),
   prob  = rtriangle(N, 0.83, 0.99, 0.85),
-  cost  = rtriangle(N, 55.5, 127.91, 88.35),
+  cost  = rtriangle(N, 55.5, 127.91, 88.35) * 10^6,
   sales = 0)
 mp <- data.frame(
   phase = 'MP',
   time  = 10,
   prob  = 1,
   cost  = 0,
-  sales = rtriangle(N, 0, 4336.00, 2559.5)) # TODO: Does not model DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
+  sales = rtriangle(N, 0, 4336.00, 2559.5) * 10^6) # TODO: Does not model DRIVE-AB report correctly as the report does not assume that y1 has 0 sales.
 
 # Combine all phases into single dataset
 driveab2018 <- rbind(pc, p1, p2, p3, p4, mp)
@@ -224,16 +225,21 @@ phases$inefficiency <- runif(N, 0, 3)
 Let us plot the phase parameters as frequency polygons (i.e. histograms) for each of the sources.
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
-p1 <- ggplot(phases, aes(cost, color=src, fill=src)) +
+p1 <- ggplot(phases, aes(cost/10^6, color=src, fill=src)) +
   geom_freqpoly() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank(),
+        #axis.text.x = element_text(angle = 90, hjust = 1),
         panel.grid.minor.y=element_blank(),
         panel.grid.major.y=element_blank(),
         legend.position='none') +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 8),
+                     #label = unit_format(scale=1e-6)
+                     #label = dollar_format()
+                     ) +
+                     #label = unit_format(unit = 'M')) +
   xlab('Cost (million USD)')
 p2 <- ggplot(phases, aes(time, color=src, fill=src)) +
   geom_freqpoly() +
@@ -257,7 +263,7 @@ p3 <- ggplot(phases, aes(prob*100, color=src, fill=src)) +
         legend.position='none') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   xlab('Probability (%)')
-p4 <- ggplot(phases, aes(sales, color=src, fill=src)) +
+p4 <- ggplot(phases, aes(sales / 10^9, color=src, fill=src)) +
   geom_freqpoly() +
   facet_grid(phase ~ ., scale='free_y') +
   theme(axis.title.y=element_blank(),
@@ -266,7 +272,7 @@ p4 <- ggplot(phases, aes(sales, color=src, fill=src)) +
         panel.grid.minor.y=element_blank(),
         panel.grid.major.y=element_blank(),
         legend.position='none') +
-  xlab('Sales (million USD)')
+  xlab('Sales (billion USD)')
 p5 <- ggplot(phases, aes(discount_rate_priv*100, color=src, fill=src)) +
   geom_freqpoly() +
   facet_grid(phase ~ ., scale='free_y') +
@@ -527,10 +533,10 @@ Note the usage of different scales across the different metrics due the vastly d
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 phasely_final_from_phases_long %>%
   filter(from == 'PC' & valuation %in% cum_metrics) %>%
-  ggplot(aes(valuation, value, fill=src)) +
+  ggplot(aes(valuation, value / 10^6, fill=src)) +
   geom_boxplot() +
+  ylab('USD (millions)') +
   xlab(element_blank()) +
-  ylab(element_blank()) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
   facet_wrap(. ~ valuation, scale='free', nrow=1)
 ```
@@ -547,8 +553,10 @@ phasely_final_from_phases_long_sum %>%
   geom_line(position=pos, size=1, linetype='dotted') +
   geom_point(position=pos, size=2) +
   facet_wrap(. ~ src, ncol=2) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  xlab(element_blank()) + ylab(element_blank())
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     label = unit_format(unit = '', scale = 1e-6)
+                     ) +
+  xlab(element_blank()) + ylab('USD (millions)')
 ```
 
 ## Year-based method
@@ -710,10 +718,10 @@ Again, note the usage of different scales across the different metrics due the v
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 final_year_from_phases_long %>%
   filter(from == 'PC' & valuation %in% cum_metrics) %>%
-  ggplot(aes(valuation, value, fill=src)) +
+  ggplot(aes(valuation, value/10^6, fill=src)) +
   geom_boxplot() +
   xlab(element_blank()) +
-  ylab(element_blank()) +
+  ylab('USD (millions)') +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
   facet_wrap(. ~ valuation, scale='free', nrow=1)
 ```
@@ -728,8 +736,10 @@ years_from_phases_long_sum %>%
   filter(from == 'PC') %>%
   filter(valuation %in% metrics) %>%
   ggplot(aes(year, med)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  xlab(element_blank()) + ylab(element_blank()) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
+                     label = unit_format(unit='', scale = 1e-6)) +
+  xlab(element_blank()) +
+  ylab('USD (millions)') +
   geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
   geom_line(aes(color=src)) +
   facet_wrap(. ~ valuation, scale='free_y', ncol=2)
@@ -744,8 +754,10 @@ years_from_phases_long_sum %>%
   filter(from == 'PC') %>%
   filter(valuation %in% cum_metrics) %>%
   ggplot(aes(year, med)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  xlab(element_blank()) + ylab(element_blank()) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
+                     label = unit_format(unit='', scale = 1e-6)) +
+  xlab(element_blank()) +
+  ylab('USD (millions)') +
   geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
   geom_line(aes(color=src)) +
   facet_wrap(. ~ valuation, scale='free_y', ncol=2)
@@ -767,9 +779,11 @@ final_year_from_phases_long_sum %>%
   geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
   geom_line(position=pos, size=1, linetype='dotted') +
   geom_point(position=pos, size=2)  +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 9),
+                     label = unit_format(unit='', scale = 1e-6)) +
   facet_wrap(. ~ src, ncol=2) +
-  xlab(element_blank()) + ylab(element_blank())
+  xlab(element_blank()) +
+  ylab('USD (millions)')
 ```
 
 The table below summarizes the valuation metrics from the start of pre-clinical.
@@ -807,10 +821,10 @@ p <- both %>%
   mutate(src = recode(src,
                       'DRIVE-AB (2018)' = 'drive-ab',
                       'Sertkaya et. al (2014)' = 'sertkaya')) %>%
-  ggplot(aes(src, value, color=method, fill=method)) +
+  ggplot(aes(src, value / 10^6, color=method, fill=method)) +
   geom_boxplot(alpha=0.3) +
   facet_wrap(valuation ~ from, scales='free', ncol=6) +
-  ylab(element_blank()) +
+  ylab('USD (millions)') +
   xlab(element_blank()) +
   theme(axis.text.x = element_text(angle=90))
 print(p)
@@ -829,10 +843,10 @@ for (curr in c('npv', 'enpv')) {
     mutate(src = recode(src,
                         'DRIVE-AB (2018)' = 'drive-ab',
                         'Sertkaya et. al (2014)' = 'sertkaya')) %>%
-    ggplot(aes(src, value, color=method, fill=method)) +
+    ggplot(aes(src, value / 10^6, color=method, fill=method)) +
     geom_boxplot(alpha=0.3) +
     facet_wrap(valuation ~ from, scales='free', ncol=6) +
-    ylab(element_blank()) +
+    ylab('USD (millions)') +
     xlab(element_blank()) +
     theme(axis.text.x = element_text(angle=90))
   print(p)
@@ -852,7 +866,7 @@ log10_sample <- function (n, min, max, magnitude_min, magnitude_max) {
   runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
 }
 
-prize_samples <- log10_sample(N, 1, 9.999, -1, 3) # Reuse intervention samples across phases
+prize_samples <- log10_sample(N, 1, 9.999, -1, 3) * 10^6 # Reuse intervention samples across phases
 intervene <- function (phases, target_phase, intervention_name) {
   data.frame(phases) %>%
     mutate(intervention = intervention_name,
@@ -881,8 +895,14 @@ print(intervened %>%
       filter(prizes > 0) %>%
       ggplot(aes(prizes, fill=phase)) +
       geom_histogram() +
-      theme(axis.title.y=element_blank()) +
       facet_wrap(interaction(intervention, phase)~., ncol=3) +
+      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
+                         breaks = pretty_breaks(8)) +
+      xlab('USD (billions)') +
+      ylab(element_blank()) +
+      theme(axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.y = element_blank()) +
       guides(fill = FALSE))
 ```
 
@@ -969,8 +989,11 @@ print(finals %>%
   geom_point(alpha=1, shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ intervention, ncol=3, scale='free') +
-  xlab('Prize') +
+  xlab('Prize (million usd)') +
   ylab('Private ENPV') +
+  scale_x_continuous(label = unit_format(scale=1e-9, unit=''),
+                     breaks = pretty_breaks(8)) +
+  scale_y_continuous(label = unit_format(scale=1e-6, unit='')) +
   theme(legend.position = 'top')
 )
 ```
@@ -984,17 +1007,21 @@ Intervention prize and private ENPV improvement also, expectedly, seem correlate
 
 ```{r, echo=FALSE}
 print(finals %>%
-  ggplot(aes(prizes, enpv_prv_aft-enpv_prv_bef, color = src)) +
+  ggplot(aes(prizes, (enpv_prv_aft-enpv_prv_bef), color = src)) +
   geom_point(alpha=0.8, shape=1) +
   facet_wrap(. ~ intervention, ncol=3, scale='free') +
-  xlab('Prize') +
-  ylab('Private ENPV improvement') +
-  scale_x_continuous(trans='log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  ylab('Private ENPV improvement\n(million usd)') +
+  xlab('Prize\n(million usd)') +
   scale_y_continuous(trans='log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     ) +
+  scale_x_continuous(trans='log10',
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     ) +
   theme(legend.position = 'top')
 )
 ```
@@ -1007,14 +1034,18 @@ print(finals %>%
   ggplot(aes(prizes, enpv_prv_aft - enpv_prv_bef, color=intervention)) +
   geom_smooth(method='lm', se=FALSE) +
   geom_point(shape=1) +
-  xlab('Prize') +
-  ylab('Private ENPV improvement') +
+  xlab('Prize \n (million usd)') +
+  ylab('Private ENPV improvement\n(million usd)') +
   scale_y_continuous(trans='log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     ) +
   scale_x_continuous(trans='log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     ) +
   facet_wrap(. ~ src, ncol=2, 'free') +
   theme(legend.position = 'top')
 )
@@ -1038,9 +1069,13 @@ finals %>%
   geom_jitter(shape=1) +
   facet_grid(cols=vars(src), rows=vars(intervention)) +
   theme(legend.position = 'none') +
+  ylab('Go-decision\n(in pre-clinical)') +
+  xlab('Prize\n(million usd)') +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4)))
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     )
 ```
 
 The analysis above is however also diffused by the fact that we are not differentiating between turning a no-decision into a go-decision and simply paying money to a project that already faced a go-decision.
@@ -1058,9 +1093,13 @@ nos %>%
   geom_jitter(shape=1) +
   facet_grid(cols=vars(src), rows=vars(intervention)) +
   theme(legend.position = 'none') +
+  ylab('Go-decision\n(in pre-clinical)') +
+  xlab('Prize\n(million usd)') +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4)))
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')
+                     )
 ```
 
 To more properly understand at what ranges the different interventions have their effects we can build a logistic regression model where prize size predicts no/go:
@@ -1088,9 +1127,12 @@ nos %>%
   ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
   geom_line() +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
-  xlab('Prize (log)') + ylab('Probability of no -> go') +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit='')
+                     ) +
+  xlab('Prize (million usd)') +
+  ylab('Probability of no-to-go (%)') +
   facet_wrap(. ~ src)
 ```
 
@@ -1115,9 +1157,12 @@ finals %>%
   ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
   geom_line() +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
-  xlab('Prize (log)') + ylab('Probability of go-decision') +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit='')
+                     ) +
+  xlab('Prize (million usd)') +
+  ylab('Probability of pre-clinical go-decision (%)') +
   facet_wrap(. ~ src)
 ```
 
@@ -1143,17 +1188,20 @@ Note that ENPV for the benefactor necessarily will be negative as the prize payo
 
 ```{r, echo=FALSE}
 finals %>%
-  ggplot(aes(prizes, -enpv_ind, color=intervention)) +
+  ggplot(aes(prizes / 10^6, -enpv_ind / 10^6, color=intervention)) +
   geom_point(shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=3) +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+                     minor_breaks = c(1:9 %o% 10^(0:4)),
+                     label = unit_format(unit = '')) +
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:3)),
-                     minor_breaks = c(1:9 %o% 10^(0:3))) +
-  xlab('Prize (log)') + ylab('-Indirect ENPV per entry (including terminations)') +
+                     minor_breaks = c(1:9 %o% 10^(0:3)),
+                     label = unit_format(unit = '')) +
+  xlab('Prize (million usd)') +
+  ylab('-Indirect ENPV per entry (including terminations)\n(million usd)') +
   theme(legend.position = 'top')
 ```
 
@@ -1171,12 +1219,15 @@ finals %>%
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=3) +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')) +
   scale_y_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:3)),
-                     minor_breaks = c(1:9 %o% 10^(0:3))) +
-  xlab('Prize (log)') + ylab('-Indirect ENPV per go-decision') +
+                     breaks = c(1 %o% 10^(0:3)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:3)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')) +
+  xlab('Prize \n(million usd)') +
+  ylab('-Indirect ENPV per go-decision\n(million usd)') +
   theme(legend.position = 'top')
 ```
 
@@ -1196,14 +1247,16 @@ finals %>%
   geom_smooth(method='loess', se=FALSE) +
   geom_point(shape=1) +
   facet_wrap(. ~ src) +
-  ylab('-Indirect ENPV per exit') +
-  xlab('Prizes (log)') +
-  scale_y_continuous(trans = 'log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
-  scale_x_continuous(trans = 'log10',
-                     breaks = c(1 %o% 10^(0:4)),
-                     minor_breaks = c(1:9 %o% 10^(0:4))) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:4)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:3)) * 10^6,
+                     minor_breaks = c(1:9 %o% 10^(0:3)) * 10^6,
+                     label = unit_format(scale = 1e-6, unit = '')) +
+  xlab('Prize \n(million usd)') +
+  ylab('-Indirect ENPV per exit\n(million usd)') +
   theme(legend.position = 'top')
 ```
 
@@ -1224,7 +1277,8 @@ finals %>%
   geom_point(shape=1) +
   geom_smooth(method='loess', se=FALSE, color='black') +
   xlab('Probability of go-decision (%) under prize size') +
-  ylab('-Indirect ENPV per entry') +
+  ylab('-Indirect ENPV per entry\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position='none') +
   facet_grid(cols=vars(intervention), rows=vars(src))
 
@@ -1235,7 +1289,8 @@ finals %>%
   geom_point(shape=1) +
   geom_smooth(method='loess', se=FALSE, color='black') +
   xlab('Probability of go-decision (%) under prize size') +
-  ylab('-Indirect ENPV per go-decision') +
+  ylab('-Indirect ENPV per go-decision\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position='none') +
   facet_grid(cols=vars(intervention), rows=vars(src))
 ```
@@ -1261,7 +1316,8 @@ rbind(a, b) %>%
   scale_linetype_manual(values=c('dotted', 'solid')) +
   facet_wrap(. ~ src) +
   xlab('Probability of go-decision (%) under prize size') +
-  ylab('-Indirect ENPV') +
+  ylab('-Indirect ENPV (million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position = 'top', legend.title = element_blank())
 ```
 
@@ -1285,7 +1341,8 @@ finals %>%
   geom_smooth(method='loess', se=FALSE) +
   facet_wrap(. ~ src) +
   xlab('Probability of go-decision (%) under prize size') +
-  ylab('Indirect ENPV per exit') +
+  ylab('Indirect ENPV per exit (million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position = 'top')
 ```
 
@@ -1356,7 +1413,8 @@ inefficient_finals %>%
   geom_smooth(method='lm', se=FALSE, color='black') +
   facet_wrap(. ~ src) +
   xlab('Public inefficiency (%)') +
-  ylab('-Direct ENPV per entry') +
+  ylab('-Direct ENPV per entry\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position='none')
 ```
 
@@ -1369,7 +1427,8 @@ inefficient_finals %>%
   geom_smooth(method='lm', se=FALSE, color='black') +
   facet_wrap(. ~ src) +
   xlab('Public inefficiency (%)') +
-  ylab('-Direct ENPV per output') +
+  ylab('-Direct ENPV per output\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
   theme(legend.position='none')
 ```
 
@@ -1424,14 +1483,15 @@ both_go %>%
   ggplot(aes(
     round(go_pred_prize*100/5)*5,
     round(inefficiency*100/40)*40,
-    fill=diff_pred)) +
+    fill=diff_pred / 10^9)) +
   scale_fill_gradient2(high='darkgreen', mid='white', low='red', midpoint=0) +
   geom_raster(interpolate=FALSE) +
   facet_grid(rows=vars(src), cols=vars(intervention)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
   xlab('Prize size yielding probability of go-decision (%)') +
   ylab('Public inefficiency (%)') +
-  theme(legend.position='none')
+  labs(fill = 'Difference in favor\nof indirect funding\n(billion usd)') +
+  theme(legend.position='bottom')
 ```
 
 These levelplots give an indication of the overall relationship between direct and indirect funding for various levels of go-ratio yielding prize sizes and public inefficiencies.
@@ -1453,13 +1513,16 @@ for (curr in sources) {
     filter(go_pred_prize < go_lim_up)
 
   p1 <- sub %>%
-    ggplot(aes(go_pred_prize*100, -enpv_ind_per_exit, color=intervention)) +
+    ggplot(aes(go_pred_prize*100, -enpv_ind_per_exit, group=intervention, color=intervention)) +
+    geom_point(shape=20, alpha=0.5) +
     geom_smooth(method='loess', se=FALSE) +
+    geom_line(stat='smooth', method='loess', color='black', alpha=0.2, size=1) +
     facet_wrap(. ~ src) +
     xlab('Prob of go-decision (%) under prize size') +
-    ylab('-Indirect ENPV per exit') +
+    ylab('-Indirect ENPV per exit\n(million usd)') +
     scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
+                       breaks = scales::pretty_breaks(n = 8)) +
     theme(legend.position = 'left') +
     ggtitle('Indirect funding')
 
@@ -1467,14 +1530,15 @@ for (curr in sources) {
 
   p2 <- inefficient_finals %>%
     filter(src == curr) %>%
-    ggplot(aes(inefficiency*100, -enpv_dir/tot_prob, color=src)) +
-    #geom_point(shape=1) +
-    geom_smooth(method='lm', se=FALSE, color='black') +
+    ggplot(aes(inefficiency*100, -enpv_dir/tot_prob)) +
+    geom_point(shape=20, color='darkgrey', alpha=0.6) +
+    geom_line(stat='smooth', method='lm', color='red', size=1) +
+    geom_line(stat='smooth', method='loess', color='black', size=1) +
     facet_wrap(. ~ src) +
     xlab('Public inefficiency (%)') +
-    ylab('-Direct ENPV per exit') +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    ylab('-Direct ENPV per exit\n(million usd)') +
     scale_y_continuous(
+      label = unit_format(scale = 1e-6, unit = ''),
       breaks = scales::pretty_breaks(n = 8),
       position='right',
       limits=c(min(yscale), max(yscale))) +
@@ -1488,7 +1552,9 @@ for (curr in sources) {
 ### Output probability per input dollar
 TODO:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
+# TODO: WARNINGS SUPRESSED!
+
 # TODO: These two mutations should be added much earlier.
 finals <- finals %>%
   mutate(exit_per_enpv_ind =
@@ -1512,17 +1578,18 @@ finals %>%
  geom_smooth(se=FALSE) +
  facet_wrap(. ~ src * intervention) +
  xlab('Prob of go-decision (%) under prize size') +
- #ylab('Probability of exit per -indirect ENPV') +
- #scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
- #scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
- scale_y_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- scale_x_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- #ylim(-0.01, 0.01) +
- theme(legend.position = 'left') +
+ ylab('Probability of exit per -indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
+ theme(legend.position = 'left',
+       axis.text.x = element_text(angle = 90)) +
  ggtitle('Indirect funding')
 
 finals %>%
@@ -1534,16 +1601,16 @@ finals %>%
  geom_smooth(se=FALSE) +
  facet_wrap(. ~ src) +
  xlab('Prob of go-decision (%) under prize size') +
- #ylab('Probability of exit per -indirect ENPV') +
- #scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
- #scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
- scale_y_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- scale_x_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- #ylim(-0.01, 0.01) +
+ ylab('Probability of exit per -indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
  theme(legend.position = 'left') +
  ggtitle('Indirect funding')
 
@@ -1556,16 +1623,16 @@ finals %>%
  geom_point(shape=1) +
  geom_smooth(se=FALSE) +
  facet_wrap(. ~ src) +
- #ylab('Probability of exit per -indirect ENPV') +
- #scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
- #scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
- scale_y_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- scale_x_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- #ylim(-0.01, 0.01) +
+ ylab('Probability of exit per -indirect ENPV (filtered?)') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
  theme(legend.position = 'left') +
  ggtitle('Indirect funding')
 
@@ -1578,53 +1645,54 @@ finals %>%
  geom_point(shape=1) +
  geom_smooth(se=FALSE) +
  facet_wrap(. ~ src * intervention) +
- #ylab('Probability of exit per -indirect ENPV') +
- #scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
- #scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
- scale_y_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- scale_x_continuous(trans = 'log10',
-                    breaks = c(1 %o% 10^(0:4)),
-                    minor_breaks = c(1:9 %o% 10^(0:4))) +
- #ylim(-0.01, 0.01) +
+ ylab('Probability of exit per -indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
  theme(legend.position = 'left') +
  ggtitle('Indirect funding')
+```
 
-#for (curr in sources) {
-#  print(head(finals))
-#  p1 <- finals %>%
-#    filter(src == curr) %>%
-#    filter(go_pred_prize < go_lim_up) %>%
-#    ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
-#    geom_smooth(method='loess', se=FALSE) +
-#    facet_wrap(. ~ src) +
-#    xlab('Prob of go-decision (%) under prize size') +
-#    ylab('-Indirect ENPV per exit') +
-#    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-#    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-#    theme(legend.position = 'left') +
-#    ggtitle('Indirect funding')
-#
-#  yscale <- layer_scales(p1, 1, 1)$y$range$range
-#
-#  p2 <- inefficient_finals %>%
-#    filter(src == curr) %>%
-#    ggplot(aes(inefficiency*100, exit_per_enpv_dir, color=src)) +
-#    #geom_point(shape=1) +
-#    geom_smooth(method='lm', se=FALSE, color='black') +
-#    facet_wrap(. ~ src) +
-#    xlab('Public inefficiency (%)') +
-#    ylab('-Direct ENPV per exit') +
-#    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-#    scale_y_continuous(
-#      breaks = scales::pretty_breaks(n = 8),
-#      position='right',
-#      limits=c(min(yscale), max(yscale))) +
-#    ggtitle('Direct funding')
-#
-#  print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
-#}
+```{r, echo=FALSE}
+for (curr in sources) {
+  p1 <- finals %>%
+    filter(src == curr) %>%
+    filter(go_pred_prize < go_lim_up) %>%
+    ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+    geom_smooth(method='loess', se=FALSE) +
+    facet_wrap(. ~ src) +
+    xlab('Prob of go-decision (%) under prize size') +
+    ylab('-Indirect ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    theme(legend.position = 'left') +
+    ggtitle('Indirect funding')
+
+  yscale <- layer_scales(p1, 1, 1)$y$range$range
+
+  p2 <- inefficient_finals %>%
+    filter(src == curr) %>%
+    ggplot(aes(inefficiency*100, exit_per_enpv_dir, color=src)) +
+    #geom_point(shape=1) +
+    geom_smooth(method='lm', se=FALSE, color='black') +
+    facet_wrap(. ~ src) +
+    xlab('Public inefficiency (%)') +
+    ylab('-Direct ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(
+      breaks = scales::pretty_breaks(n = 8),
+      position='right',
+      limits=c(min(yscale), max(yscale))) +
+    ggtitle('Direct funding')
+
+  print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
+}
 ```
 
 
