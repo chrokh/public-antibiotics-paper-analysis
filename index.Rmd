@@ -6,33 +6,14 @@ date: 2019
 output:
   html_document:
     toc: true
-    #toc_float:
-    #  collapsed: false
+    toc_float:
+      collapsed: false
     theme: cosmo
   pdf_document:
     toc: true
     latex_engine: xelatex
 ---
 
-<!--
-# TODO: Something I haven't taken into consideration is that one can assume that a prize has a fixed number of max-recipients but still assume that all developers will believe that they will be the ones who get it. This should significantly reduce the cost per output antibiotic.
-# TODO: I should make all Sertkaya data separate data sets. I.e. use all the different indications.
--->
-
-```{r, include=FALSE}
-knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
-set.seed(1)
-```
-
-```{r, libraries, include=FALSE}
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(gridExtra)
-library(ggpubr)
-library(triangle)
-library(scales)
-```
 
 # Introduction
 This document serves as supplementary material for the paper "Time for public pharma?".
@@ -41,8 +22,35 @@ Direct funding is here used to mean that a benefactor pays for antibiotics R&D a
 Indirect funding is here used to mean that a benefactor issues non-dilutive prizes to whoever completes a particular phase, with the intent of incentivizing private developers to undertake said and prior phases.
 This analysis is attempting to estimate which of the two options would be cheaper, ceteris paribus, for the benefactor.
 
+## How to compile this document
+If you're reading this in an html format then the document is already compiled.
+You can compile the Rmd file like this:
+
+```
+Rscript -e "library(rmarkdown); render('index.Rmd')"
+```
+
 # Input data and simulation
-Let us begin by setting `N` to the number of samples that we want per data set.
+We begin by loading external libraries, setting basic document options, and setting the seed for the randomizer.
+
+```{r, basics, message=FALSE}
+# Dependencies
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(triangle)
+library(scales)
+
+# Cache code chunks
+knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
+
+# Set seed for reproducibility
+set.seed(1)
+```
+
+Let us then set `N` to the number of samples that we want per data set.
 This number represents the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 Meaning that if one considers all the data sets at once then the number of random projects drawn is `N` multiplied with the number of data sets.
