@@ -31,7 +31,10 @@ Rscript -e "library(rmarkdown); render('index.Rmd')"
 ```
 
 # Input data and simulation
-We begin by loading external libraries, setting basic document options, and setting the seed for the randomizer.
+We begin by loading external libraries, setting basic document options, seeding the randomizer and deciding on an `N` which will dictate the number of project samples that we'll draw from each dataset.
+In other words, `N` is the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
+The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
+Meaning that if one considers all the data sets at once then the number of random projects drawn is in total `N` times the number of data sets considered.
 
 ```{r, basics, message=FALSE}
 # Dependencies
@@ -48,14 +51,8 @@ knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
 
 # Set seed for reproducibility
 set.seed(1)
-```
 
-Let us then set `N` to the number of samples that we want per data set.
-This number represents the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
-The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
-Meaning that if one considers all the data sets at once then the number of random projects drawn is `N` multiplied with the number of data sets.
-
-```{r, set-n}
+# Set N
 N = 5000
 ```
 
