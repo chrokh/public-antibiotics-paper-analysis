@@ -30,7 +30,7 @@ You can compile the Rmd file like this:
 Rscript -e "library(rmarkdown); render('index.Rmd')"
 ```
 
-Note that much of the code that is used to generate this analysis is not rendered into the final output (html) document.
+Note: While most of the code that is used to perform the analysis is included in the rendered (i.e. output) document, some is not.
 If you need further details, please consult the source code used to generate the output document.
 
 
@@ -41,7 +41,7 @@ In other words, `N` is the number of random samples that we'll draw from a stoch
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 
 ```{r, set-n}
-N = 5000
+N = 500
 ```
 
 ```{r, basics, include=FALSE}
@@ -86,15 +86,11 @@ Nevertheless the spread of data across the seven datasets will hopefully convinc
 
 
 
-## Sertkaya et. al (2014)
+## Sertkaya distribution
 
 The following is an approximation of the data used by Sertkaya et. al (2014) as a few of their assumptions are not reconcilable with our modeling choices.
-These minor points of differentiation are outlined as comments in the code chunk below.
 Sertkaya et. al (2014) differentiates between antibiotics on the basis of target indication.
 In this analysis we treat the data for each target indication a separate dataset.
-
-
-### Distribution
 
 ```{r, dist-sertkaya, echo=FALSE}
 indications <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
@@ -170,21 +166,19 @@ sertkaya2014_market_share_dist <-
 
 In the tables below, time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
 
-```{r, print-sertkaya-dist, results='asis'}
-kable(sertkaya2014_phase_dist)
-kable(sertkaya2014_market_size_dist)
-kable(sertkaya2014_market_share_dist)
+```{r, print-sertkaya-dist, echo=FALSE}
+kable(sertkaya2014_phase_dist, caption='sertkaya2014_phase_dist')
+kable(sertkaya2014_market_size_dist, caption='sertkaya2014_market_size_dist')
+kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 ```
 
 
-### Sampling
-We now sample the Sertkaya dataset and add discount rate samples.
+## Sertkaya sample
+We first sample development data from the Sertkaya distributions.
 
-```{r, sample-sertkaya}
-
-# Sample development phases
-dist <- sertkaya2014_phase_dist %>%
-        arrange(indication, phase)
+```{r, sample-sertkaya-dev}
+# alias
+dist <- sertkaya2014_phase_dist %>% arrange(indication, phase)
 
 variations <- length(unique(dist$phase)) * length(unique(dist$indication))
 sertkaya2014_dev <-
@@ -197,7 +191,11 @@ sertkaya2014_dev <-
              cost = rtriangle2(N * variations, dist$cost_min, dist$cost_max, dist$cost_mid),
              prob = rtriangle2(N * variations, dist$prob_min, dist$prob_max, dist$prob_mid),
              sales = 0)
+```
 
+We then sample market data from the sertkaya distributions.
+
+```{r, sample-sertkaya-market}
 ## Sample market
 years       <- sertkaya2014_market_share_dist$year
 indications <- sertkaya2014_market_size_dist$indication
@@ -216,9 +214,11 @@ sertkaya2014_market <-
                           sertkaya2014_market_size_dist$max),
                         each = length(unique(years)))
              ) %>% mutate(sales = share * (size / 100))
+```
 
-kable(head(sertkaya2014_market))
+We then merge the development sample with the market sample into a single Sertkaya sample.
 
+```{r, join-sertkaya-dev-market}
 # Join development and market data
 sertkaya2014 <-
   rbind(sertkaya2014_dev,
@@ -226,14 +226,21 @@ sertkaya2014 <-
         ) %>%
   mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
   arrange(subject, src, phase)
+```
 
-# Normalize sampled values
+Since the Sertkaya data was expressed in millions of USD, percentages, and months we will normalize the sample into USD, fractions, and years respectively.
+
+```{r, normalize-sertkaya}
 sertkaya2014 <- sertkaya2014 %>%
   mutate(time = time / 12,     # Convert months to years
          cost = cost * 10^6,   # Convert from million usd to usd
          sales = sales * 10^6, # Convert fom million usd to usd
          prob = prob / 100)    # Convert from percentage to fraction
+```
 
+Finally we will sample developer discount rates and add it to our Sertkaya sample.
+
+```{r, sertkaya-add-discount-rate}
 # Sample discount rates from the same distribution across all phases and indications.
 discount_rates <- runif(N * length(unique(sertkaya2014$src)), 0.09, 0.24)
 sertkaya2014$discount_rate_priv <-
@@ -247,7 +254,7 @@ NOTE2: WE'RE NOT ACTUALLY TAKING THE "PRODUCT LAUNCH SUCCESS PROBABILITY" INTO A
 </div>
 
 
-## DRIVE-AB (2018)
+## DRIVE-AB distribution
 The following is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported as comments in the code chunk below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
 
@@ -255,8 +262,6 @@ In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue lin
 Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
 Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
 The first year will thus be non-zero if the market revenues of the project is non-zero.
-
-### Distribution
 
 ```{r, driveab-dist}
 prob <- data.frame(phase = DEVELOPMENT_PHASES,
@@ -324,7 +329,7 @@ TODO: The time, cost, and probability distributions are visualized in the plots 
 ```
 
 
-### Sampling
+## DRIVE-AB sample
 
 ```{r, sample-driveab}
 # Sample development phases
