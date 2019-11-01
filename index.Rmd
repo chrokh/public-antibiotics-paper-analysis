@@ -16,11 +16,11 @@ output:
 
 
 # Introduction
-This document serves as supplementary material for the paper "Time for public pharma?".
+This document contains the full analysis that underpins the paper paper "Time for public pharma?".
 This is a monte carlo simulation that explores direct versus indirect funding of antibiotics research and development (R&D).
 Direct funding is here used to mean that a benefactor pays for antibiotics R&D at cost.
 Indirect funding is here used to mean that a benefactor issues non-dilutive prizes to whoever completes a particular phase, with the intent of incentivizing private developers to undertake said and prior phases.
-This analysis is attempting to estimate which of the two options would be cheaper, ceteris paribus, for the benefactor.
+This analysis estimates which of the two, ceteris paribus, is cheaper for the benefactor.
 
 ## How to compile this document
 If you're reading this in an html format then the document is already compiled.
@@ -30,14 +30,21 @@ You can compile the Rmd file like this:
 Rscript -e "library(rmarkdown); render('index.Rmd')"
 ```
 
+Note that much of the code that is used to generate this analysis is not rendered into the final output (html) document.
+If you need further details, please consult the source code used to generate the output document.
+
 
 # Input data
-We begin by loading external libraries, setting basic document options, seeding the randomizer and deciding on an `N` which will dictate the number of project samples that we'll draw from each dataset.
+We begin by setting `N` which will dictate the number of project samples that we'll draw from each dataset.
+Meaning that if one considers all the data sets at once then the number of random projects drawn is in total `N` times the number of data sets considered.
 In other words, `N` is the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
-Meaning that if one considers all the data sets at once then the number of random projects drawn is in total `N` times the number of data sets considered.
 
-```{r, basics, message=FALSE}
+```{r, set-n}
+N = 5000
+```
+
+```{r, basics, include=FALSE}
 # Dependencies
 library(knitr)
 library(tidyr)
@@ -53,9 +60,6 @@ knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
 
 # Set seed for reproducibility
 set.seed(1)
-
-# Set N
-N = 5000
 
 # NOTE: I can't figure out how to sample from multiple triangular distributions
 # at the same time using rtriangle, so here's my sloppy quickfix implementation.
@@ -74,17 +78,25 @@ MARKET_PHASES <- paste('M', 1:10, sep='')
 PHASES <- c(DEVELOPMENT_PHASES, MARKET_PHASES)
 ```
 
+The data in this analysis stem from two publications, Sertkaya et. al (2014) and DRIVE-AB (2018).
+The latter considers only a single hypothetical antibiotic, while the former considers six hypothetical antibiotics targeting different indications.
+Our analysis is thus applied to seven data sets stemming from two publications.
+Disclaimer: The data in DRIVE-AB (2018) is heavily based on Sertkaya et. al (2014) and is thus not an independently collected dataset.
+Nevertheless the spread of data across the seven datasets will hopefully convince the reader that our conclusions hold over a wide range of input data variation.
+
+
+
 ## Sertkaya et. al (2014)
 
-The following is an approximation of the data used by Sertkaya et. al (2014) as they make a few assumptions that are not reconcilable with the way we have chosen to model antibiotics R&D.
-The points of differentiation are outlined as comments in the code chunk below.
-Sertkaya et. al differentiates between different types of antibiotics on the basis of target indication.
-In this analysis we consider the data for each target indication a separate dataset.
+The following is an approximation of the data used by Sertkaya et. al (2014) as a few of their assumptions are not reconcilable with our modeling choices.
+These minor points of differentiation are outlined as comments in the code chunk below.
+Sertkaya et. al (2014) differentiates between antibiotics on the basis of target indication.
+In this analysis we treat the data for each target indication a separate dataset.
 
 
 ### Distribution
 
-```{r, dist-sertkaya, results='asis'}
+```{r, dist-sertkaya, echo=FALSE}
 indications <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
 
 sertkaya2014_phase_dist <-
@@ -154,47 +166,16 @@ sertkaya2014_market_share_dist <-
   data.frame(year = 1:10,
              min = c(0.05, 0.87, 1.57, 2.57, 3.92, 5.79, 7.52, 8.52, 10.10, 12.27),
              max = c(0.11, 1.91, 3.47, 5.68, 8.64, 12.77, 16.59, 18.80, 22.30, 27.08))
+```
 
+In the tables below, time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
+
+```{r, print-sertkaya-dist, results='asis'}
 kable(sertkaya2014_phase_dist)
 kable(sertkaya2014_market_size_dist)
 kable(sertkaya2014_market_share_dist)
 ```
 
-The time, cost, and probability distributions are visualized in the plots below, in respective order.
-
-```{r, plot-sertkaya-dist, echo=FALSE}
-pos = position_dodge(0.9)
-sertkaya2014_phase_dist %>%
-  ggplot(aes(indication, color=indication)) +
-  geom_point(aes(y=time_min), position=pos) +
-  geom_point(aes(y=time_max), position=pos) +
-  geom_linerange(aes(ymin=time_min, ymax=time_max), position=pos) +
-  facet_wrap(. ~ phase, scale='free') +
-  ylab('Time (months)') +
-  xlab(element_blank()) +
-  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-        legend.position = 'none')
-
-pos = position_dodge(0.9)
-sertkaya2014_phase_dist %>%
-  ggplot(aes(indication, color=indication)) +
-  geom_pointrange(aes(y=cost_mid, ymin=cost_min, ymax=cost_max), position=pos) +
-  facet_wrap(. ~ phase, scale='free') +
-  ylab('Cost (million USD)') +
-  xlab(element_blank()) +
-  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-        legend.position = 'none')
-
-pos = position_dodge(0.9)
-sertkaya2014_phase_dist %>%
-  ggplot(aes(indication, color=indication)) +
-  geom_pointrange(aes(y=prob_mid, ymin=prob_min, ymax=prob_max), position=pos) +
-  facet_wrap(. ~ phase, scale='free') +
-  ylab('Probability of success (%)') +
-  xlab(element_blank()) +
-  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-        legend.position = 'none')
-```
 
 ### Sampling
 We now sample the Sertkaya dataset and add discount rate samples.
@@ -202,7 +183,9 @@ We now sample the Sertkaya dataset and add discount rate samples.
 ```{r, sample-sertkaya}
 
 # Sample development phases
-dist <- sertkaya2014_phase_dist %>% arrange(indication, phase) # alias
+dist <- sertkaya2014_phase_dist %>%
+        arrange(indication, phase)
+
 variations <- length(unique(dist$phase)) * length(unique(dist$indication))
 sertkaya2014_dev <-
   data.frame(# TODO: Does it really make sense that I allow 'recycling' of
