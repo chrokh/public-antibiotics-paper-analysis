@@ -196,7 +196,6 @@ sertkaya2014_dev <-
 We then sample market data from the sertkaya distributions.
 
 ```{r, sample-sertkaya-market}
-## Sample market
 years       <- sertkaya2014_market_share_dist$year
 indications <- sertkaya2014_market_size_dist$indication
 sertkaya2014_market <-
@@ -219,7 +218,6 @@ sertkaya2014_market <-
 We then merge the development sample with the market sample into a single Sertkaya sample.
 
 ```{r, join-sertkaya-dev-market}
-# Join development and market data
 sertkaya2014 <-
   rbind(sertkaya2014_dev,
         select(sertkaya2014_market, -c(share, size))
@@ -238,13 +236,12 @@ sertkaya2014 <- sertkaya2014 %>%
          prob = prob / 100)    # Convert from percentage to fraction
 ```
 
-Finally we will sample developer discount rates and add it to our Sertkaya sample.
+Finally we sample developer discount rates and add it to our Sertkaya sample.
 
 ```{r, sertkaya-add-discount-rate}
-# Sample discount rates from the same distribution across all phases and indications.
 discount_rates <- runif(N * length(unique(sertkaya2014$src)), 0.09, 0.24)
-sertkaya2014$discount_rate_priv <-
-  rep(discount_rates, each=length(unique(sertkaya2014$phase)))
+sertkaya2014$discount_rate_priv <- rep(discount_rates,
+                                       each=length(unique(sertkaya2014$phase)))
 ```
 
 <div class="alert alert-danger">
@@ -256,14 +253,14 @@ NOTE2: WE'RE NOT ACTUALLY TAKING THE "PRODUCT LAUNCH SUCCESS PROBABILITY" INTO A
 
 ## DRIVE-AB distribution
 The following is an approximation of the data used in DRIVE-AB final report (2018).
-Some deviations (reported as comments in the code chunk below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
+Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
 
 In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of 10 years.
 Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
 Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
 The first year will thus be non-zero if the market revenues of the project is non-zero.
 
-```{r, driveab-dist}
+```{r, driveab-dist, echo=FALSE}
 prob <- data.frame(phase = DEVELOPMENT_PHASES,
                    min = c(17.5, 25, 34, 31.4, 83),
                    mid = c(35.2, 33, 50, 67, 85),
@@ -285,54 +282,21 @@ params <- data.frame(tot_sales_min = 0,
                      tot_sales_mid = 2559.5,
                      tot_sales_max = 4336,
                      market_years = 10)
+```
 
+```{r, print-driveab-dist, echo=FALSE}
 kable(prob, caption = 'Probability of success (%)')
 kable(time, caption = 'Time (months)')
 kable(cost, caption = 'Cost (million USD)')
 kable(params, caption = 'Additional parameters')
 ```
 
-TODO: The time, cost, and probability distributions are visualized in the plots below, in respective order.
-
-```{r, plot-driveab-dist, echo=FALSE}
-#pos = position_dodge(0.9)
-#time %>%
-#  ggplot(aes(phase, color=phase)) +
-#  geom_point(aes(y=min), position=pos) +
-#  geom_point(aes(y=max), position=pos) +
-#  geom_linerange(aes(ymin=min, ymax=max), position=pos) +
-#  facet_wrap(. ~ phase, scale='free') +
-#  ylab('Time (months)') +
-#  xlab(element_blank()) +
-#  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-#        legend.position = 'none')
-#
-#pos = position_dodge(0.9)
-#cost %>%
-#  ggplot(aes(phase, color=phase)) +
-#  geom_pointrange(aes(y=mid, ymin=min, ymax=max), position=pos) +
-#  facet_wrap(. ~ phase, scale='free') +
-#  ylab('Cost (million USD)') +
-#  xlab(element_blank()) +
-#  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-#        legend.position = 'none')
-#
-#pos = position_dodge(0.9)
-#prob %>%
-#  ggplot(aes(phase, color=phase)) +
-#  geom_pointrange(aes(y=mid, ymin=min, ymax=max), position=pos) +
-#  facet_wrap(. ~ phase, scale='free') +
-#  ylab('Probability of success (%)') +
-#  xlab(element_blank()) +
-#  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=1),
-#        legend.position = 'none')
-```
-
 
 ## DRIVE-AB sample
 
-```{r, sample-driveab}
-# Sample development phases
+We first sample development data from the DRIVE-AB distribution.
+
+```{r, sample-driveab-dev}
 variations <- length(unique(time$phase))
 driveab2018_dev <- data.frame(
   subject = rep(1:N, each = variations),
@@ -342,8 +306,11 @@ driveab2018_dev <- data.frame(
   prob = rtriangle2(N * variations, prob$min, prob$max, prob$mid),
   sales = 0
   )
+```
 
-# Sample market data
+We then sample market data from the DRIVE-AB distribution.
+
+```{r, sample-driveab-market}
 variations <- length(MARKET_PHASES)
 driveab2018_sales <-
   data.frame(subject = rep(1:N, each = variations),
@@ -364,7 +331,12 @@ driveab2018_sales <-
              mutate(slope = (tot_sales * 2 / (market_years + 1)) / market_years,
                           sales = 1:variations * slope) %>%
              select(-market_years, -tot_sales, -slope) # Remove temp columns
+```
 
+We then merge the development sample and the market sample into a single DRIVE-AB sample.
+We also normalize time, costs, revenues, and probabilities.
+
+```{r, merge-driveab-sample}
 driveab2018 <-
 
   # Join development and market data
@@ -382,12 +354,16 @@ driveab2018 <-
          cost = cost * 10^6,   # Convert from million usd to usd
          sales = sales * 10^6, # Convert from million usd to usd
          prob = prob / 100)    # Convert from percentage to fraction
-
-# Sample discount rates from the same distribution across all phases
-discount_rates <- runif(N, 0.05, 0.30)
-driveab2018$discount_rate_priv <-
-  rep(discount_rates, each = length(unique(driveab2018$phase)))
 ```
+
+Finally we sample developer discount rates and add it to our DRIVE-AB sample.
+
+```{r, sample-driveab-discountrates}
+discount_rates <- runif(N, 0.05, 0.30)
+driveab2018$discount_rate_priv <- rep(discount_rates,
+                                      each = length(unique(driveab2018$phase)))
+```
+
 
 
 ## Additional parameters
