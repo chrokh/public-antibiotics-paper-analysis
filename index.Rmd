@@ -423,7 +423,8 @@ phases$inefficiency <- runif(N * length(sources), public_inefficiency_min, publi
 
 
 ## Summary statistics
-Let us plot the phase parameters as frequency polygons (i.e. histograms) for each of the sources.
+We now present some summary statistics to sanity check that our samples seem to be properly drawn from their respective distributions.
+We first plot development data.
 
 ```{r, summary-violins, echo=FALSE, warning=FALSE, message=FALSE}
 phases %>%
@@ -462,24 +463,6 @@ phases %>%
         panel.grid.minor.x=element_blank(),
         panel.grid.major.x=element_blank()) +
   ylab('Probability of success (%)')
-```
-
-Seeing that it is difficult to see the nature of the distribution of cost in the violin plots above, let us also depict that property as a frequency plot.
-
-```{r, summary-polys, echo=FALSE, warning=FALSE, message=FALSE}
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(cost/10^6, color=src, fill=src)) +
-  geom_freqpoly() +
-  facet_wrap(phase ~ ., scale='free') +
-  theme(axis.title.y=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank(),
-        panel.grid.minor.y=element_blank(),
-        panel.grid.major.y=element_blank(),
-        legend.position='right') +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  xlab('Cost (million USD)')
 ```
 
 Below we plot the sampled sales data.
@@ -522,6 +505,18 @@ phases %>%
         panel.grid.minor.x=element_blank(),
         panel.grid.major.x=element_blank()) +
   ylab('Total sales (million USD)')
+```
+
+Finally, we plot the discount rate data.
+
+```{r, summary-discount-rates, echo=FALSE}
+phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  ggplot(aes(phase, discount_rate_priv*100, color=src, fill=src)) +
+  geom_violin() +
+  ylab('Discount rate (%)') +
+  xlab('Phase') +
+  theme(legend.position = 'top')
 ```
 
 Interestingly, some parameters are quite dispersly distributed between phases.
