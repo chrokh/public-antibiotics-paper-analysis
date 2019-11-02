@@ -174,26 +174,27 @@ kable(sertkaya2014_market_size_dist, caption='sertkaya2014_market_size_dist')
 kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 ```
 
-Sertkaya et. al (2014) also consider costs for a few additional supply chain activities as listed below.
+Sertkaya et. al (2014) also consider costs for a few additional supply chain activities and non-clinical work, as listed below.
 The costs are spread across various phases as indicated by the fractions under the corresponding phase columns.
-These figures stem from Table 9 of Sertkaya et. al (2014).
+These figures and fractions stem from Table 9 and section 3.2.7 of Sertkaya et. al (2014) respectively.
 
 ```{r, sertkaya-additional-dist, echo=FALSE}
 activity <-
   c('Sample preparation for animal/human studies',
     'Process research/development/design',
     'Plant design',
-    'Plant build')
+    'Plant build',
+    'Non-clinical work')
 sertkaya2014_additional_dist <-
   data.frame(activity,
-             min = c(2.4, 18.7, 10.7, 69.6),
-             mid = c(2.7, 26.8, 13.4, 83),
-             max = c(2.9, 34.8, 16.1, 96.3),
+             min = c(2.4, 18.7, 10.7, 69.6, 3.4),
+             mid = c(2.7, 26.8, 13.4, 83,   3.7),
+             max = c(2.9, 34.8, 16.1, 96.3, 4),
              PC = 0,
-             P1 = c(1/3, 0.5, 0,    0),
-             P2 = c(1/3, 0.5, 0,    0),
-             P3 = c(1/3, 0,   0.75, 0),
-             P4 = c(0,   0,   0.25, 1)
+             P1 = c(1/3, 0.5, 0,    0, 0),
+             P2 = c(1/3, 0.5, 0,    0, 1/3),
+             P3 = c(1/3, 0,   0.75, 0, 1/3),
+             P4 = c(0,   0,   0.25, 1, 1/3)
   )
 
 kable(sertkaya2014_additional_dist, caption='sertkaya2014_additional_dist')
