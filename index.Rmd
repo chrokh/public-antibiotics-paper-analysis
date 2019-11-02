@@ -190,10 +190,17 @@ sertkaya2014_additional_dist <-
              P3 = c(1/3, 0,   0.75, 0),
              P4 = c(0,   0,   0.25, 1)
   )
+
+kable(sertkaya2014_additional_dist, caption='sertkaya2014_additional_dist')
 ```
 
-```{r, print-sertkaya-additional-dist, echo=FALSE, dependson=-1}
-kable(sertkaya2014_additional_dist, caption='sertkaya2014_additional_dist')
+Finally, Sertkaya et. al (2014) presents their assumed discount rates in section 3.2.1 of their report, and we employ the same, as per the table below.
+
+```{r, sertkaya-discount-rate-dist, echo=FALSE}
+sertkaya2014_discount_rate_dist <-
+  data.frame(min = 0.09, mid = 0.11, max = 0.24)
+
+kable(sertkaya2014_discount_rate_dist, caption='sertkaya2014_discount_rate_dist')
 ```
 
 
@@ -276,7 +283,6 @@ sertkaya2014_dev_and_additional <-
 We then sample market data from the sertkaya distributions.
 
 ```{r, sample-sertkaya-market}
-subjects <- unique(sertkaya2014_dev$subject)
 num_years <- length(unique(sertkaya2014_market_share_dist$year))
 share_dist <- sertkaya2014_market_share_dist
 size_dist <- sertkaya2014_market_size_dist
@@ -338,8 +344,12 @@ Finally we sample developer discount rates and add it to our Sertkaya sample.
 
 ```{r, sertkaya-add-discount-rate}
 sertkaya2014_agents <-
-  data.frame(subject = subjects,
-             discount_rate_priv = runif(length(sertkaya2014_subjects), 0.09, 0.24))
+  data.frame(subject = sertkaya2014_subjects,
+             discount_rate_priv =
+               rtriangle2(length(sertkaya2014_subjects),
+                          sertkaya2014_discount_rate_dist$min,
+                          sertkaya2014_discount_rate_dist$max,
+                          sertkaya2014_discount_rate_dist$mid))
 
 # Left join
 sertkaya2014 <- merge(sertkaya2014, sertkaya2014_agents, by='subject', all.x=TRUE)
