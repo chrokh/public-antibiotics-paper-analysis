@@ -169,6 +169,33 @@ kable(sertkaya2014_market_size_dist, caption='sertkaya2014_market_size_dist')
 kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 ```
 
+Sertkaya et. al (2014) also consider costs for a few additional supply chain activities as listed below.
+The costs are spread across various phases as indicated by the fractions under the corresponding phase columns.
+These figures stem from Table 9 of Sertkaya et. al (2014).
+
+```{r, sertkaya-additional-dist, echo=FALSE}
+activity <-
+  c('Sample preparation for animal/human studies',
+    'Process research/development/design',
+    'Plant design',
+    'Plant build')
+sertkaya2014_additional_dist <-
+  data.frame(activity,
+             min = c(2.4, 18.7, 10.7, 69.6),
+             mid = c(2.7, 26.8, 13.4, 83),
+             max = c(2.9, 34.8, 16.1, 96.3),
+             PC = 0,
+             P1 = c(1/3, 0.5, 0,    0),
+             P2 = c(1/3, 0.5, 0,    0),
+             P3 = c(1/3, 0,   0.75, 0),
+             P4 = c(0,   0,   0.25, 1)
+  )
+```
+
+```{r, print-sertkaya-additional-dist, echo=FALSE, dependson=-1}
+kable(sertkaya2014_additional_dist, caption='sertkaya2014_additional_dist')
+```
+
 
 ## Sertkaya sample
 We first sample development data from the Sertkaya distributions.
@@ -191,6 +218,59 @@ sertkaya2014_dev <- data.frame(
   cost = rtriangle2(N * num_phases * num_indications, dist$cost_min, dist$cost_max, dist$cost_mid),
   prob = rtriangle2(N * num_phases * num_indications, dist$prob_min, dist$prob_max, dist$prob_mid),
   sales = 0)
+```
+
+We then sample the additional supply chain activity costs data,
+distribute the samples across the phases according to their corresponding fractions,
+and then sum up the additional costs per phase for every subject.
+
+```{r, sample-sertkaya-additional}
+sertkaya2014_subjects <- unique(sertkaya2014_dev$subject)
+num_sertkaya2014_subjects <- length(sertkaya2014_subjects)
+num_additional <- nrow(sertkaya2014_additional_dist)
+dist <- sertkaya2014_additional_dist
+
+sertkaya2014_additional <-
+  data.frame(subject = rep(sertkaya2014_subjects, each = num_additional),
+             cost = rtriangle2(num_additional * num_sertkaya2014_subjects,
+                               dist$min, dist$max, dist$mid),
+             PC = dist$PC,
+             P1 = dist$P1,
+             P2 = dist$P2,
+             P3 = dist$P3,
+             P4 = dist$P4) %>%
+
+  # Compute phase based costs
+  transmute(subject = subject,
+            PC = PC * cost,
+            P1 = P1 * cost,
+            P2 = P2 * cost,
+            P3 = P3 * cost,
+            P4 = P4 * cost) %>%
+
+  # Wide to long
+  gather(phase, cost, PC:P4) %>%
+
+  # Sum up costs per phase
+  group_by(subject, phase) %>%
+  summarize(add_cost = sum(cost))
+```
+
+We then merge the development sample with the supply chain activities sample into a single sample,
+and add the additional supply chain costs to the sampled phase costs.
+
+```{r, join-sertkaya-dev-additional}
+sertkaya2014_dev_and_additional <-
+
+  # Merge dev samples with additional supply chain costs samples (by left join)
+  merge(sertkaya2014_dev, sertkaya2014_additional,
+             by=c('subject', 'phase'), all.x = TRUE) %>%
+
+  # Add supply chain activities cost to phase cost
+  mutate(cost = cost + add_cost) %>%
+
+  # Remove supply chain costs column
+  select(-add_cost)
 ```
 
 We then sample market data from the sertkaya distributions.
@@ -232,18 +312,19 @@ sertkaya2014_market <-
   mutate(sales = (share / 100) * size)
 ```
 
-We then merge the development sample with the market sample into a single Sertkaya sample.
+We then merge the development sample that's been merged with the supply chain costs sample,
+with the market sample into a single Sertkaya sample.
 
 ```{r, join-sertkaya-dev-market}
 sertkaya2014 <-
-  rbind(sertkaya2014_dev,
+  rbind(sertkaya2014_dev_and_additional,
         select(sertkaya2014_market, -c(share, size))
         ) %>%
   mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
   arrange(subject, src, phase)
 ```
 
-Since the Sertkaya data was expressed in millions of USD, percentages, and months we will normalize the sample into USD, fractions, and years respectively.
+Since the Sertkaya data was expressed in millions of USD, percentages, and months we here normalize the sample into USD, fractions, and years respectively.
 
 ```{r, normalize-sertkaya}
 sertkaya2014 <- sertkaya2014 %>%
@@ -256,7 +337,6 @@ sertkaya2014 <- sertkaya2014 %>%
 Finally we sample developer discount rates and add it to our Sertkaya sample.
 
 ```{r, sertkaya-add-discount-rate}
-sertkaya2014_subjects <- unique(sertkaya2014$subject)
 sertkaya2014_agents <-
   data.frame(subject = subjects,
              discount_rate_priv = runif(length(sertkaya2014_subjects), 0.09, 0.24))
