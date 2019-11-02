@@ -93,10 +93,10 @@ Sertkaya et. al (2014) differentiates between antibiotics on the basis of target
 In this analysis we treat the data for each target indication a separate dataset.
 
 ```{r, dist-sertkaya, echo=FALSE}
-indications <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
+INDICATIONS <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
 
 sertkaya2014_phase_dist <-
-  rbind(data.frame(indication = indications,
+  rbind(data.frame(indication = INDICATIONS,
                    phase = 'PC',
                    time_min = 52,
                    time_max = 72,
@@ -107,7 +107,7 @@ sertkaya2014_phase_dist <-
                    prob_mid = 35.2,
                    prob_max = 69
                    ),
-        data.frame(indication = indications,
+        data.frame(indication = INDICATIONS,
                    phase = 'P1',
                    time_min = 9,
                    time_max = 21.6,
@@ -118,7 +118,7 @@ sertkaya2014_phase_dist <-
                    prob_mid = 33,
                    prob_max = 83.7
                    ),
-        data.frame(indication = indications,
+        data.frame(indication = INDICATIONS,
                    phase = 'P2',
                    time_min = c(12, 9, 12, 10, 10, 16),
                    time_max = 30,
@@ -129,7 +129,7 @@ sertkaya2014_phase_dist <-
                    prob_mid = 50,
                    prob_max = 74
                    ),
-        data.frame(indication = indications,
+        data.frame(indication = INDICATIONS,
                    phase = 'P3',
                    time_min = c(20, 10, 10, 17, 17, 35),
                    time_max = 47,
@@ -140,7 +140,7 @@ sertkaya2014_phase_dist <-
                    prob_mid = 67,
                    prob_max = 78.6
                    ),
-        data.frame(indication = indications,
+        data.frame(indication = INDICATIONS,
                    phase = 'P4',
                    time_min = 6,
                    time_max = 12.5,
@@ -154,7 +154,7 @@ sertkaya2014_phase_dist <-
         ) %>% arrange(phase, indication)
 
 sertkaya2014_market_size_dist <-
-  data.frame(indication = indications,
+  data.frame(indication = INDICATIONS,
              min = c(2720, 3070, 2290, 2530, 5760, 1780),
              max = 9230)
 
@@ -177,42 +177,62 @@ kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 We first sample development data from the Sertkaya distributions.
 
 ```{r, sample-sertkaya-dev}
-# alias
-dist <- sertkaya2014_phase_dist %>% arrange(indication, phase)
+# Ensure expected order of rows in distribution before sampling
+dist <- sertkaya2014_phase_dist %>%
+  arrange(indication, phase)
 
-variations <- length(unique(dist$phase)) * length(unique(dist$indication))
-sertkaya2014_dev <-
-  data.frame(# TODO: Does it really make sense that I allow 'recycling' of
-             # subject IDs across datasets/srcs?
-             subject = rep(1:N, each = variations),
-             src = rep(unique(dist$indication), each = length(unique(dist$phase))),
-             phase = dist$phase,
-             time = runif(N * variations, dist$time_min, dist$time_max),
-             cost = rtriangle2(N * variations, dist$cost_min, dist$cost_max, dist$cost_mid),
-             prob = rtriangle2(N * variations, dist$prob_min, dist$prob_max, dist$prob_mid),
-             sales = 0)
+# Convenience aliases
+num_phases <- length(DEVELOPMENT_PHASES)
+num_indications <- length(INDICATIONS)
+
+# Build data frame
+sertkaya2014_dev <- data.frame(
+  subject = rep(1:(N * num_indications), each = num_phases),
+  src = dist$indication,
+  phase = dist$phase,
+  time = runif(N * num_phases * num_indications, dist$time_min, dist$time_max),
+  cost = rtriangle2(N * num_phases * num_indications, dist$cost_min, dist$cost_max, dist$cost_mid),
+  prob = rtriangle2(N * num_phases * num_indications, dist$prob_min, dist$prob_max, dist$prob_mid),
+  sales = 0)
 ```
 
 We then sample market data from the sertkaya distributions.
 
 ```{r, sample-sertkaya-market}
-years       <- sertkaya2014_market_share_dist$year
-indications <- sertkaya2014_market_size_dist$indication
+subjects <- unique(sertkaya2014_dev$subject)
+num_years <- length(unique(sertkaya2014_market_share_dist$year))
+share_dist <- sertkaya2014_market_share_dist
+size_dist <- sertkaya2014_market_size_dist
+
+# Merge market share dist and market size dist to simplify sampling
+dist <-
+  data.frame(indication = size_dist$indication,
+             size_min = size_dist$min,
+             size_max = size_dist$max,
+             year = rep(share_dist$year, each = num_indications),
+             share_min = rep(share_dist$min, each = num_indications),
+             share_max = rep(share_dist$max, each = num_indications)) %>%
+
+  # Ensure expected order of rows in distribution before sampling
+  arrange(indication, year)
+
+# Build data frame
 sertkaya2014_market <-
-  data.frame(subject = rep(1:N, each=length(years)*length(indications)),
-             src = rep(indications, each=length(years)),
-             phase = paste('M', rep(years, length(indications)), sep=''), # TODO: Use MARKET_PHASES vector
-             time = 12, # months
-             cost = 0,
-             prob = 100, # percentage
-             share = runif(N * length(indications),
-                           sertkaya2014_market_share_dist$min,
-                           sertkaya2014_market_share_dist$max),
-             size = rep(runif(N,
-                          sertkaya2014_market_size_dist$min,
-                          sertkaya2014_market_size_dist$max),
-                        each = length(unique(years)))
-             ) %>% mutate(sales = share * (size / 100))
+  data.frame(
+    subject = rep(1:(N * num_indications), each = num_years),
+    src = dist$indication,
+    # Deliberately not using MARKET_PHASES to ensure that I'm grabbing the rows
+    # in the correct order.
+    phase = paste('M', dist$year, sep=''),
+    time = 12,  # months
+    cost = 0,   # million usd
+    prob = 100, # percentage
+    share = runif(N * num_indications * num_years, dist$share_min, dist$share_max),
+    size = runif(N * num_indications * num_years, dist$size_min, dist$size_max)
+    ) %>%
+
+  # Compute sales from size and share
+  mutate(sales = (share / 100) * size)
 ```
 
 We then merge the development sample with the market sample into a single Sertkaya sample.
@@ -239,10 +259,25 @@ sertkaya2014 <- sertkaya2014 %>%
 Finally we sample developer discount rates and add it to our Sertkaya sample.
 
 ```{r, sertkaya-add-discount-rate}
-discount_rates <- runif(N * length(unique(sertkaya2014$src)), 0.09, 0.24)
-sertkaya2014$discount_rate_priv <- rep(discount_rates,
-                                       each=length(unique(sertkaya2014$phase)))
+sertkaya2014_subjects <- unique(sertkaya2014$subject)
+sertkaya2014_agents <-
+  data.frame(subject = subjects,
+             discount_rate_priv = runif(length(sertkaya2014_subjects), 0.09, 0.24))
+
+# Left join
+sertkaya2014 <- merge(sertkaya2014, sertkaya2014_agents, by='subject', all.x=TRUE)
 ```
+
+<!--
+The table below is an excerpt of the sampled data ordered by subject and then phase.
+
+```{r, sertkaya-sample-excerpt, echo=FALSE}
+sertkaya2014 %>%
+  arrange(subject, phase) %>%
+  head(n=25) %>%
+  kable
+```
+-->
 
 <div class="alert alert-danger">
 NOTE1: AFTER SAMPLING THIS WE MUST ALSO SAMPLE THE ACTIVITIES FROM TABLE 9
@@ -254,11 +289,6 @@ NOTE2: WE'RE NOT ACTUALLY TAKING THE "PRODUCT LAUNCH SUCCESS PROBABILITY" INTO A
 ## DRIVE-AB distribution
 The following is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
-
-In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of 10 years.
-Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
-Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
-The first year will thus be non-zero if the market revenues of the project is non-zero.
 
 ```{r, driveab-dist, echo=FALSE}
 prob <- data.frame(phase = DEVELOPMENT_PHASES,
@@ -284,10 +314,18 @@ params <- data.frame(tot_sales_min = 0,
                      market_years = 10)
 ```
 
-```{r, print-driveab-dist, echo=FALSE}
+```{r, print-driveab-dev-dist, echo=FALSE}
 kable(prob, caption = 'Probability of success (%)')
 kable(time, caption = 'Time (months)')
 kable(cost, caption = 'Cost (million USD)')
+```
+
+In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of 10 years.
+Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
+Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
+The first year will thus be non-zero if the market revenues of the project is non-zero.
+
+```{r, print-driveab-market-dist, echo=FALSE}
 kable(params, caption = 'Additional parameters')
 ```
 
@@ -297,13 +335,17 @@ kable(params, caption = 'Additional parameters')
 We first sample development data from the DRIVE-AB distribution.
 
 ```{r, sample-driveab-dev}
-variations <- length(unique(time$phase))
+# Subjects must not overlap across datasets
+last_sertkaya_subject <- max(sertkaya2014_subjects)
+first_subject <- last_sertkaya_subject + 1
+last_subject <- last_sertkaya_subject + N
+
 driveab2018_dev <- data.frame(
-  subject = rep(1:N, each = variations),
+  subject = rep(first_subject:last_subject, each = num_phases),
   phase = DEVELOPMENT_PHASES,
-  time = rtriangle2(N * variations, time$min, time$max, time$mid),
-  cost = rtriangle2(N * variations, cost$min, cost$max, cost$mid),
-  prob = rtriangle2(N * variations, prob$min, prob$max, prob$mid),
+  time = rtriangle2(N * num_phases, time$min, time$max, time$mid),
+  cost = rtriangle2(N * num_phases, cost$min, cost$max, cost$mid),
+  prob = rtriangle2(N * num_phases, prob$min, prob$max, prob$mid),
   sales = 0
   )
 ```
@@ -311,26 +353,32 @@ driveab2018_dev <- data.frame(
 We then sample market data from the DRIVE-AB distribution.
 
 ```{r, sample-driveab-market}
-variations <- length(MARKET_PHASES)
-driveab2018_sales <-
-  data.frame(subject = rep(1:N, each = variations),
-             phase = MARKET_PHASES,
-             time = 12, # months
-             cost = 0, # million usd
-             prob = 100, # percentage
-             market_years = params$market_years,
-             tot_sales = rep(rtriangle(N,
-                                   params$tot_sales_min,
-                                   params$tot_sales_max,
-                                   params$tot_sales_mid),
-                             each = variations)
-             # TODO: The slope does add up to the full market size, but are we
-             # sloping in the same way as in the DRIVE-AB report? Or did we start
-             # from 0 in the report?
-             ) %>%
-             mutate(slope = (tot_sales * 2 / (market_years + 1)) / market_years,
-                          sales = 1:variations * slope) %>%
-             select(-market_years, -tot_sales, -slope) # Remove temp columns
+# TODO: Should be from additional parameters table.
+num_market_years <- length(MARKET_PHASES)
+
+# Use same subjects as in development sample
+driveab2018_subjects <- unique(driveab2018_dev$subject)
+
+# Build data frame
+driveab2018_sales <- data.frame(
+  subject = rep(driveab2018_subjects, each = num_market_years),
+  phase = MARKET_PHASES,
+  time = 12,  # months
+  cost = 0,   # million usd
+  prob = 100, # percentage
+  tot_sales = rep(rtriangle(N,
+                 params$tot_sales_min,
+                 params$tot_sales_max,
+                 params$tot_sales_mid),
+           each = num_market_years)
+  ) %>%
+
+  # Interpolate yearly sales
+  mutate(slope = (tot_sales * 2 / (num_market_years + 1)) / num_market_years,
+        sales = 1:num_market_years * slope) %>%
+
+  # Remove temp columns
+  select(-tot_sales, -slope)
 ```
 
 We then merge the development sample and the market sample into a single DRIVE-AB sample.
@@ -359,9 +407,12 @@ driveab2018 <-
 Finally we sample developer discount rates and add it to our DRIVE-AB sample.
 
 ```{r, sample-driveab-discountrates}
-discount_rates <- runif(N, 0.05, 0.30)
-driveab2018$discount_rate_priv <- rep(discount_rates,
-                                      each = length(unique(driveab2018$phase)))
+driveab2018_agents <-
+  data.frame(subject = driveab2018_subjects,
+             discount_rate_priv = runif(length(driveab2018_subjects), 0.05, 0.3))
+
+# Left join
+driveab2018 <- merge(driveab2018, driveab2018_agents, by='subject', all.x=TRUE)
 ```
 
 
@@ -412,13 +463,13 @@ public_discount_rate_max = 0.045
 public_inefficiency_min <- 0
 public_inefficiency_max <- 3
 
-# TODO: When I add parameters (before this point) to the dataset that are
-# dependent on order I should explicitly reorder the dataset like I do here:
-phases <- phases %>% arrange(phase, src, subject, phase)
-# TODO: Should the same subject have the same public discount rate across data sets?
-phases$discount_rate_publ <- runif(N * length(sources), public_discount_rate_min, public_discount_rate_max)
-# TODO: Should the same subject have the same inefficiency across data sets?
-phases$inefficiency <- runif(N * length(sources), public_inefficiency_min, public_inefficiency_max)
+subjects <- unique(phases$subject)
+agents <- data.frame(
+  subject = subjects,
+  inefficiency = runif(length(subjects), public_inefficiency_min, public_inefficiency_max),
+  discount_rate_publ = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
+
+phases <- merge(phases, agents, by='subject', all.x=TRUE)
 ```
 
 
@@ -688,6 +739,7 @@ phasely_final_valuation_long <- phasely_valuation_long %>%
 
 Let us then plot the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
 Note the usage of different scales across the different metrics due the vastly different values.
+
 
 ```{r, phase-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 phasely_final_valuation_long %>%
