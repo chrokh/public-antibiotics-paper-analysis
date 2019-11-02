@@ -9,7 +9,8 @@ output:
     toc: true
     toc_float:
       collapsed: false
-    theme: sandstone
+    theme: default
+    highlight: haddock
 ---
 
 
