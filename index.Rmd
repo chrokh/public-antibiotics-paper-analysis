@@ -9,9 +9,6 @@ output:
     toc_float:
       collapsed: false
     theme: cosmo
-  pdf_document:
-    toc: true
-    latex_engine: xelatex
 ---
 
 
