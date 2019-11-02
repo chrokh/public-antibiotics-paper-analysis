@@ -5,10 +5,11 @@ author: Christopher Okhravi
 date: 2019
 output:
   html_document:
+    number_sections: true
     toc: true
     toc_float:
       collapsed: false
-    theme: cosmo
+    theme: sandstone
 ---
 
 
