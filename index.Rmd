@@ -366,13 +366,6 @@ sertkaya2014 %>%
 ```
 -->
 
-<div class="alert alert-danger">
-NOTE1: AFTER SAMPLING THIS WE MUST ALSO SAMPLE THE ACTIVITIES FROM TABLE 9
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-NOTE2: WE'RE NOT ACTUALLY TAKING THE "PRODUCT LAUNCH SUCCESS PROBABILITY" INTO ACCOUNT (see Table 12)
-</div>
-
-
 ## DRIVE-AB distribution
 The following is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
