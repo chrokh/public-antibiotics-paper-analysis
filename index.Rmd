@@ -96,6 +96,7 @@ sertkaya2014_phase_dist <-
   rbind(data.frame(indication = INDICATIONS,
                    phase = 'PC',
                    time_min = 52,
+                   time_mid = 66,
                    time_max = 72,
                    cost_min = 19,
                    cost_mid = 21.1,
@@ -107,6 +108,7 @@ sertkaya2014_phase_dist <-
         data.frame(indication = INDICATIONS,
                    phase = 'P1',
                    time_min = 9,
+                   time_mid = 10.5,
                    time_max = 21.6,
                    cost_min = 7.3,
                    cost_mid = 9.7,
@@ -118,6 +120,7 @@ sertkaya2014_phase_dist <-
         data.frame(indication = INDICATIONS,
                    phase = 'P2',
                    time_min = c(12, 9, 12, 10, 10, 16),
+                   time_mid = c(15, 10, 15, 11, 11, 18),
                    time_max = 30,
                    cost_min = c(7.4, 7.12, 7.28, 7.68, 7.28, 12.48),
                    cost_mid = c(9.2, 8.9, 9.1, 9.6, 9.1, 15.6),
@@ -129,6 +132,7 @@ sertkaya2014_phase_dist <-
         data.frame(indication = INDICATIONS,
                    phase = 'P3',
                    time_min = c(20, 10, 10, 17, 17, 35),
+                   time_mid = c(24, 12.5, 12.5, 21.5, 21.5, 39),
                    time_max = 47,
                    cost_min = c(33.36, 26.88, 31.04, 40.48, 35.04, 81.12),
                    cost_mid = c(41.7, 33.6, 38.8, 50.6, 43.8, 101.4),
@@ -140,6 +144,7 @@ sertkaya2014_phase_dist <-
         data.frame(indication = INDICATIONS,
                    phase = 'P4',
                    time_min = 6,
+                   time_mid = 9,
                    time_max = 12.5,
                    cost_min = 1.9588, # NDA/BLA submission cost
                    cost_mid = 1.9588, # NDA/BLA submission cost
@@ -221,7 +226,7 @@ sertkaya2014_dev <- data.frame(
   subject = rep(1:(N * num_indications), each = num_phases),
   src = dist$indication,
   phase = dist$phase,
-  time = runif(N * num_phases * num_indications, dist$time_min, dist$time_max),
+  time = rtriangle2(N * num_phases * num_indications, dist$time_min, dist$time_max, dist$time_mid),
   cost = rtriangle2(N * num_phases * num_indications, dist$cost_min, dist$cost_max, dist$cost_mid),
   prob = rtriangle2(N * num_phases * num_indications, dist$prob_min, dist$prob_max, dist$prob_mid),
   sales = 0)
