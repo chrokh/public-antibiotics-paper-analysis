@@ -989,6 +989,15 @@ yearly_valuation_long <- yearly_valuation %>%
   gather('metric', 'value', -src, -intervention, -subject, -from, -year) %>%
   transform(metric = factor(metric, levels = c(metrics, cum_metrics)))
 
+# Final valuations
+yearly_final_valuation <- yearly_valuation %>%
+  group_by(src, subject, from) %>%
+  arrange(year) %>%
+  summarize(cum = tail(cum, n=1),
+            epv = tail(epv, n=1),
+            npv = tail(npv, n=1),
+            enpv = tail(enpv, n=1))
+
 # Final long
 yearly_final_valuation_long <- yearly_valuation_long %>%
   filter(metric %in% cum_metrics) %>%
@@ -1091,7 +1100,7 @@ yearly_final_valuation_long %>%
         axis.text.x = element_text(angle=90, hjust=1))
 ```
 
-The table below summarizes the valuation metrics from the start of pre-clinical, in billions
+The table below summarizes the valuation metrics from the start of pre-clinical, in millions.
 
 ```{r, year-based-table, echo=FALSE}
 sub <- yearly_final_valuation_long %>%
@@ -1144,6 +1153,58 @@ for (curr in c('cum', 'env', 'npv', 'enpv')) {
 Evidently, there are no differences between the methods in the non-discounted valuation metrics.
 Interestingly however, the difference also seems comparatively small in the discounted metrics, but the yearly method does indeed yield slightly higher values.
 The difference between the two methods is more pronounced the earlier your venture point of valuation since the effect of discounting has more time to accumulate.
+
+Finally, let us compare the mean ENPV (starting from pre-clinical) of the Sertkaya data using both methods to the mean ENPV reported for the same indications in Table 13 of Sertkaya et. al (2014).
+Seeing that we've attempted to reflect their assumptions as closely as possible, the resulting ENPV should not be too far apart.
+
+```{r, sertkaya-enpv-paper-comparison, echo=FALSE}
+expected <-
+  data.frame(src = INDICATIONS,
+             original = c(-2.7 * 10^6,
+                          27.1 * 10^6,
+                          37.4 * 10^6,
+                          8.9  * 10^6,
+                          21.9 * 10^6,
+                          -4.5 * 10^6))
+
+actual_phasely <- phasely_final_valuation %>%
+  filter(from == 'PC') %>%
+  group_by(src) %>%
+  summarize(phasely = mean(enpv))
+
+actual_yearly <- yearly_final_valuation %>%
+  filter(from == 'PC') %>%
+  group_by(src) %>%
+  summarize(yearly = mean(enpv))
+
+actual <- merge(actual_yearly, actual_phasely, by='src')
+comparison <- merge(expected, actual, by='src', all.x=TRUE) %>%
+  # Convert to millions
+  mutate(original = original / 10^6,
+         phasely  = phasely / 10^6,
+         yearly   = yearly / 10^6) %>%
+  # Prettier names
+  rename('Sertkaya et. al (2014)' = original)
+
+# Print table in millions
+comparison %>%
+  mutate(yearly = round(yearly, 1),
+         phasely = round(phasely, 1)) %>%
+  kable(caption = 'Mean ENPV comparison (million USD, rounded)')
+
+# Plot comparison
+comparison %>%
+  gather(method, value, -src) %>%
+  # Control printing order
+  ggplot(aes(src, value, fill=method)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  facet_wrap(. ~ src, scale='free_x', nrow=1) +
+  ylab('Mean ENPV (million usd)') +
+  xlab(element_blank()) +
+  theme(legend.position = 'top',
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
 
 
 
