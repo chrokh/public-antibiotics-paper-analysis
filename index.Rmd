@@ -91,6 +91,8 @@ The following is an approximation of the data used by Sertkaya et. al (2014) as 
 Sertkaya et. al (2014) differentiates between antibiotics on the basis of target indication.
 In this analysis we treat the data for each target indication a separate dataset.
 
+In the tables below, time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
+
 ```{r, dist-sertkaya, echo=FALSE}
 INDICATIONS <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
 
@@ -156,23 +158,29 @@ sertkaya2014_phase_dist <-
                    prob_max = 99
                    )
         ) %>% arrange(phase, indication)
+kable(sertkaya2014_phase_dist, caption='sertkaya2014_phase_dist')
+```
 
+Sertkaya et. al (2014) seems to not directly sample the market share distribution, but rather to sample a product launch success probability distribution, and then apply that sample to reach an estimate for every year's market share.
+This ensures that the market share does not vary widely between the lower and upper bound on a yearly basis.
+Instead, the point between the lower and upper bound remains constant, while the lower and upper bounds themselves vary.
+
+```{r, sertkaya2014-market-dist, echo=FALSE}
 sertkaya2014_market_size_dist <-
   data.frame(indication = INDICATIONS,
              min = c(2720, 3070, 2290, 2530, 5760, 1780),
              max = 9230)
 
+sertkaya2014_market_success_dist <-
+  data.frame(indication = INDICATIONS, min = 40, mid = 60, max = 80)
+
 sertkaya2014_market_share_dist <-
   data.frame(year = 1:10,
              min = c(0.05, 0.87, 1.57, 2.57, 3.92, 5.79, 7.52, 8.52, 10.10, 12.27),
              max = c(0.11, 1.91, 3.47, 5.68, 8.64, 12.77, 16.59, 18.80, 22.30, 27.08))
-```
 
-In the tables below, time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
-
-```{r, print-sertkaya-dist, echo=FALSE}
-kable(sertkaya2014_phase_dist, caption='sertkaya2014_phase_dist')
 kable(sertkaya2014_market_size_dist, caption='sertkaya2014_market_size_dist')
+kable(sertkaya2014_market_success_dist, caption='sertkaya2014_market_success_dist')
 kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 ```
 
@@ -283,8 +291,12 @@ sertkaya2014_additional <-
 We then sample market data from the Sertkaya distributions.
 
 ```{r, sample-sertkaya-market}
+# NOTE: This script is dependent on the order of indications remaining the same
+# across related data frames.
+
 share_dist <- sertkaya2014_market_share_dist # alias
-size_dist <- sertkaya2014_market_size_dist   # alias
+success_dist <- sertkaya2014_market_success_dist # alias
+size_dist <- sertkaya2014_market_size_dist # alias
 
 market_size <-
   # Replicate distributions N times
@@ -294,21 +306,33 @@ market_size <-
   # Sample market size
   mutate(size = runif(n(), min, max)) %>%
   # Select relevant data
-  select(indication, subject, size)
+  select(subject, size)
+
+market_success <-
+  # Replicate distributions N times
+  do.call('rbind', replicate(N, success_dist, simplify=FALSE)) %>%
+  # Add subject identifier
+  mutate(subject = sertkaya2014_subjects) %>%
+  # Sample market success
+  mutate(success = rtriangle2(n(), min, max, mid)) %>%
+  # Select relevant columns
+  select(subject, indication, success)
 
 market_share <-
-  # Replicate distributions N times
-  do.call('rbind', replicate(N * num_indications, share_dist, simplify=FALSE)) %>%
-  # Add subject identifier
-  mutate(subject = rep(sertkaya2014_subjects, each = nrow(share_dist)))
+  # Cartesian product of share dist (all years) and market success samples
+  merge(share_dist, market_success) %>%
+  # Convert percentages to fractions
+  mutate(min=min/100, max=max/100, success=success/100) %>%
+  # Compute actual market share as per Table 12 in Sertkaya et. al (2014)
+  mutate(share = (min * (1 - success)) + (max * success)) %>%
+  # Select relevant columns
+  select(subject, indication, year, share)
 
 sertkaya2014_market <-
   # Left join
   merge(market_share, market_size, by='subject', x.all=TRUE) %>%
-  # Sample market share
-  mutate(share = runif(n(), min, max)) %>%
   # Compute actual yearly sales
-  mutate(sales = (share / 100) * size) %>%
+  mutate(sales = share * size) %>%
   # Rename columns
   rename(src = indication) %>%
   # Compute phase name
@@ -316,14 +340,14 @@ sertkaya2014_market <-
   # Add hard-coded phase data
   mutate(time = 12, cost = 0, prob = 100) %>%
   # Select relevant columns
-  select(subject, src, phase, time, cost, prob, share, size, sales)
+  select(subject, src, phase, time, cost, prob, sales)
 ```
 
 We then merge the development sample and the market sample into a single Sertkaya sample:
 
 ```{r, join-sertkaya-dev-market}
 sertkaya2014 <-
-  rbind(sertkaya2014_dev, select(sertkaya2014_market, -c(share, size))) %>%
+  rbind(sertkaya2014_dev, sertkaya2014_market) %>%
   mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
   arrange(subject, src, phase)
 ```
