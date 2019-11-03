@@ -283,39 +283,40 @@ sertkaya2014_additional <-
 We then sample market data from the Sertkaya distributions.
 
 ```{r, sample-sertkaya-market}
-num_years <- length(unique(sertkaya2014_market_share_dist$year))
-share_dist <- sertkaya2014_market_share_dist
-size_dist <- sertkaya2014_market_size_dist
+share_dist <- sertkaya2014_market_share_dist # alias
+size_dist <- sertkaya2014_market_size_dist   # alias
 
-# Merge market share dist and market size dist to simplify sampling
-dist <-
-  data.frame(indication = size_dist$indication,
-             size_min = size_dist$min,
-             size_max = size_dist$max,
-             year = rep(share_dist$year, each = num_indications),
-             share_min = rep(share_dist$min, each = num_indications),
-             share_max = rep(share_dist$max, each = num_indications)) %>%
+market_size <-
+  # Replicate distributions N times
+  do.call('rbind', replicate(N, size_dist, simplify=FALSE)) %>%
+  # Add subject identifier
+  mutate(subject = sertkaya2014_subjects) %>%
+  # Sample market size
+  mutate(size = runif(n(), min, max)) %>%
+  # Select relevant data
+  select(indication, subject, size)
 
-  # Ensure expected order of rows in distribution before sampling
-  arrange(indication, year)
+market_share <-
+  # Replicate distributions N times
+  do.call('rbind', replicate(N * num_indications, share_dist, simplify=FALSE)) %>%
+  # Add subject identifier
+  mutate(subject = rep(sertkaya2014_subjects, each = nrow(share_dist)))
 
-# Build data frame
 sertkaya2014_market <-
-  data.frame(
-    subject = rep(1:(N * num_indications), each = num_years),
-    src = dist$indication,
-    # Deliberately not using MARKET_PHASES to ensure that I'm grabbing the rows
-    # in the correct order.
-    phase = paste('M', dist$year, sep=''),
-    time = 12,  # months
-    cost = 0,   # million usd
-    prob = 100, # percentage
-    share = runif(N * num_indications * num_years, dist$share_min, dist$share_max),
-    size = runif(N * num_indications * num_years, dist$size_min, dist$size_max)
-    ) %>%
-
-  # Compute sales from size and share
-  mutate(sales = (share / 100) * size)
+  # Left join
+  merge(market_share, market_size, by='subject', x.all=TRUE) %>%
+  # Sample market share
+  mutate(share = runif(n(), min, max)) %>%
+  # Compute actual yearly sales
+  mutate(sales = (share / 100) * size) %>%
+  # Rename columns
+  rename(src = indication) %>%
+  # Compute phase name
+  mutate(phase = paste('M', year, sep='')) %>%
+  # Add hard-coded phase data
+  mutate(time = 12, cost = 0, prob = 100) %>%
+  # Select relevant columns
+  select(subject, src, phase, time, cost, prob, share, size, sales)
 ```
 
 We then merge the development sample and the market sample into a single Sertkaya sample:
