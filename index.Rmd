@@ -257,36 +257,23 @@ From this point onwards it is therefore impossible to distinguish e.g. non-clini
 
 ```{r, sample-sertkaya-additional}
 sertkaya2014_subjects <- unique(sertkaya2014_dev$subject)
-num_sertkaya2014_subjects <- length(sertkaya2014_subjects)
-num_additional <- nrow(sertkaya2014_additional_dist)
-dist <- sertkaya2014_additional_dist
-
 sertkaya2014_additional <-
-  data.frame(subject = rep(sertkaya2014_subjects, each = num_additional),
-             cost = rtriangle2(num_additional * num_sertkaya2014_subjects,
-                               dist$min, dist$max, dist$mid),
-             PC = dist$PC,
-             P1 = dist$P1,
-             P2 = dist$P2,
-             P3 = dist$P3,
-             P4 = dist$P4,
-             M1 = dist$M1,
-             M2 = dist$M2,
-             M3 = dist$M3) %>%
 
-  # Compute phase based costs
-  transmute(subject = subject,
-            PC = PC * cost,
-            P1 = P1 * cost,
-            P2 = P2 * cost,
-            P3 = P3 * cost,
-            P4 = P4 * cost,
-            M1 = M1 * cost,
-            M2 = M2 * cost,
-            M3 = M3 * cost) %>%
+  # Replicate distributions N times
+  do.call('rbind', replicate(N * num_indications, sertkaya2014_additional_dist, simplify=FALSE)) %>%
+
+  # Add subject identifiers
+  mutate(subject = rep(sertkaya2014_subjects, each = nrow(sertkaya2014_additional_dist))) %>%
+
+  # Sample distributions
+  mutate(tot_cost = rtriangle2(n(), min, max, mid)) %>%
 
   # Wide to long
-  gather(phase, cost, PC:M3) %>%
+  select(-activity, -min, -max, -mid) %>%
+  gather(phase, fraction, -subject, -tot_cost) %>%
+
+  # Compute actual cost in phase
+  mutate(cost = tot_cost * fraction) %>%
 
   # Sum up costs per phase
   group_by(subject, phase) %>%
