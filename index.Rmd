@@ -73,7 +73,7 @@ rtriangle2 <- function(n, mins, maxs, mids) {
 
 # The phases we'll be working with
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
-MARKET_PHASES <- paste('M', 1:10, sep='')
+MARKET_PHASES <- paste('M', 1:20, sep='')
 PHASES <- c(DEVELOPMENT_PHASES, MARKET_PHASES)
 ```
 
@@ -87,11 +87,17 @@ Nevertheless the spread of data across the seven datasets will hopefully convinc
 
 ## Sertkaya distribution
 
-The following is an approximation of the data used by Sertkaya et. al (2014) as a few of their assumptions are not reconcilable with our modeling choices.
-Sertkaya et. al (2014) differentiates between antibiotics on the basis of target indication.
-In this analysis we treat the data for each target indication a separate dataset.
+The following is an approximation of the data used by Sertkaya et. al (2014).
+We say approximation as a few of their assumptions are not reconcilable with our modeling choices.
+These compromises are described when encountered.
 
-In the tables below, time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
+Sertkaya et. al (2014) differentiates between antibiotics on the basis of target indication.
+In our analysis we sometimes use the term dataset source (or src for short) to refer to indication since we treat each indication as a separate dataset.
+
+The table below summarize the distribution of development data as per 3.2.2 -- 3.2.5 in Sertkaya et. al (2014).
+Time is expressed in months, cost and revenues in million USD, and probabilities and market shares in percentage.
+
+We use the term phase 4 (abbreviated P4) while Sertkaya et. al (2014) use the term NDA/BLA.
 
 ```{r, dist-sertkaya, echo=FALSE}
 INDICATIONS <- c('ABOM', 'ABSSSI', 'CABP', 'CIAI', 'CUTI', 'HABP/VABP')
@@ -164,6 +170,7 @@ kable(sertkaya2014_phase_dist, caption='sertkaya2014_phase_dist')
 Sertkaya et. al (2014) seems to not directly sample the market share distribution, but rather to sample a product launch success probability distribution, and then apply that sample to reach an estimate for every year's market share.
 This ensures that the market share does not vary widely between the lower and upper bound on a yearly basis.
 Instead, the point between the lower and upper bound remains constant, while the lower and upper bounds themselves vary.
+Also, this ensures that no year has a lower market share than the previous year before peak year sales.
 
 ```{r, sertkaya2014-market-dist, echo=FALSE}
 sertkaya2014_market_size_dist <-
@@ -171,23 +178,60 @@ sertkaya2014_market_size_dist <-
              min = c(2720, 3070, 2290, 2530, 5760, 1780),
              max = 9230)
 
-sertkaya2014_market_success_dist <-
-  data.frame(indication = INDICATIONS, min = 40, mid = 60, max = 80)
-
 sertkaya2014_market_share_dist <-
-  data.frame(year = 1:10,
-             min = c(0.05, 0.87, 1.57, 2.57, 3.92, 5.79, 7.52, 8.52, 10.10, 12.27),
-             max = c(0.11, 1.91, 3.47, 5.68, 8.64, 12.77, 16.59, 18.80, 22.30, 27.08))
+  data.frame(year = 1:20,
+             min = c(0.05, 0.87, 1.57, 2.57, 3.92, 5.79, 7.52, 8.52, 10.10, rep(12.27, 11)),
+             max = c(0.11, 1.91, 3.47, 5.68, 8.64, 12.77, 16.59, 18.80, 22.30, rep(27.08, 11)))
 
 kable(sertkaya2014_market_size_dist, caption='sertkaya2014_market_size_dist')
-kable(sertkaya2014_market_success_dist, caption='sertkaya2014_market_success_dist')
 kable(sertkaya2014_market_share_dist, caption='sertkaya2014_market_share_dist')
 ```
 
+In line with 3.2.11 of Sertkaya et. al (2014) we assume a total product life (i.e. market life) of 20 years.
+In line with 3.2.9-3.2.10 of Sertkaya et. al (2014) we assume that patent expiry leads to a reduction in revenues due to generic entry.
+The time (year) of generic entry (i.e. patent expiry) and the corresponding reduction of revenues are distributed as per the table below.
+In summary this means that the captured market share will increase from year 1 to year 10, and then remain constant until generic entry (i.e. patent expiry), upon which it will be reduced to a lower constant until year 20.
+
+The table below also reports the discount rates which stem from 3.2.1 of Sertkaya et. al (2014) who use the term real opportunity cost of capital.
+
+```{r, echo=FALSE}
+sertkaya2014_market_reduction_min <- 25 # percent
+sertkaya2014_market_reduction_mid <- 50 # percent
+sertkaya2014_market_reduction_max <- 75 # percent
+sertkaya2014_generic_entry_min <- 10 # years
+sertkaya2014_generic_entry_mid <- 12 # years
+sertkaya2014_generic_entry_max <- 14 # years
+sertkaya2014_launch_success_min <- 40 # percent
+sertkaya2014_launch_success_mid <- 60 # percent
+sertkaya2014_launch_success_max <- 80 # percent
+sertkaya2014_private_discount_rate_min <- 9 # percent
+sertkaya2014_private_discount_rate_mid <- 11 # percent
+sertkaya2014_private_discount_rate_max <- 24 # percent
+
+tmp <- data.frame(parameter = c('Product launch success probability (%)',
+                                'Market reduction due to generic entry (%)',
+                                'Generic entry (year)',
+                                'Private developer discount rate (%)'),
+                  min = c(sertkaya2014_launch_success_min,
+                          sertkaya2014_market_reduction_min,
+                          sertkaya2014_generic_entry_min,
+                          sertkaya2014_private_discount_rate_min),
+                  mid = c(sertkaya2014_launch_success_mid,
+                          sertkaya2014_market_reduction_mid,
+                          sertkaya2014_generic_entry_mid,
+                          sertkaya2014_private_discount_rate_mid),
+                  max = c(sertkaya2014_launch_success_max,
+                          sertkaya2014_market_reduction_max,
+                          sertkaya2014_generic_entry_max,
+                          sertkaya2014_private_discount_rate_max))
+kable(tmp)
+```
+
 Sertkaya et. al (2014) also consider costs for a few additional (1) supply chain activities, (2) non-clinical work, and (3) post-approval studies as listed below.
-The costs are spread across various phases as indicated by the fractions under the corresponding phase columns.
-These figures and fractions stem from Table 9, section 3.2.7, and section 3.2.8 of Sertkaya et. al (2014) respectively.
-Sertkaya et. al (2014) repoert that the cost of post-approval studies may last up to three years into the market.
+The costs are spread across various phases as indicated by the percentages under the corresponding phase columns.
+These figures and percentages stem from Table 9, section 3.2.7, and section 3.2.8 of Sertkaya et. al (2014) respectively.
+
+Sertkaya et. al (2014) report that the cost of post-approval studies may last up to three years following market entry.
 As such we assume that the cost is evenly distributed over three years.
 
 ```{r, sertkaya-additional-dist, echo=FALSE}
@@ -213,7 +257,6 @@ sertkaya2014_additional_dist <-
              M3 = c(0,   0,   0,    0, 0,   1/3)
   )
 
-
 sertkaya2014_additional_dist %>%
   mutate(P1 = round(P1, 2) * 100,
          P2 = round(P2, 2) * 100,
@@ -225,230 +268,181 @@ sertkaya2014_additional_dist %>%
   kable(caption='sertkaya2014_additional_dist (million usd and rounded percentages)')
 ```
 
-Finally, Sertkaya et. al (2014) presents their assumed discount rates in section 3.2.1 of their report, and we employ the same, as per the table below.
-
-```{r, sertkaya-discount-rate-dist, echo=FALSE}
-sertkaya2014_discount_rate_dist <-
-  data.frame(min = 0.09, mid = 0.11, max = 0.24)
-
-kable(sertkaya2014_discount_rate_dist, caption='sertkaya2014_discount_rate_dist')
-```
-
-
 ## Sertkaya sample
 We first sample development data from the Sertkaya distributions.
 
 ```{r, sample-sertkaya-dev}
-# Ensure expected order of rows in distribution before sampling
-dist <- sertkaya2014_phase_dist %>%
-  arrange(indication, phase)
-
-# Convenience aliases
-num_phases <- length(DEVELOPMENT_PHASES)
-num_indications <- length(INDICATIONS)
-
-# Build data frame
-sertkaya2014_dev <- data.frame(
-  subject = rep(1:(N * num_indications), each = num_phases),
-  src = dist$indication,
-  phase = dist$phase,
-  time = rtriangle2(N * num_phases * num_indications, dist$time_min, dist$time_max, dist$time_mid),
-  cost = rtriangle2(N * num_phases * num_indications, dist$cost_min, dist$cost_max, dist$cost_mid),
-  prob = rtriangle2(N * num_phases * num_indications, dist$prob_min, dist$prob_max, dist$prob_mid),
-  sales = 0)
-```
-
-We then sample the additional supply chain activity costs data,
-distribute the samples across the phases according to their corresponding fractions,
-and then sum up the additional costs per phase for every subject.
-From this point onwards it is therefore impossible to distinguish e.g. non-clinical work costs from sample preparation costs.
-
-```{r, sample-sertkaya-additional}
-sertkaya2014_subjects <- unique(sertkaya2014_dev$subject)
-sertkaya2014_additional <-
-
-  # Replicate distributions N times
-  do.call('rbind', replicate(N * num_indications, sertkaya2014_additional_dist, simplify=FALSE)) %>%
-
-  # Add subject identifiers
-  mutate(subject = rep(sertkaya2014_subjects, each = nrow(sertkaya2014_additional_dist))) %>%
-
+sertkaya2014 <- sertkaya2014_phase_dist %>%
+  # Replicate every row N number of times
+  uncount(N) %>%
+  # Add subject ids but group by phase so identifiers are reused across phases
+  group_by(phase) %>% mutate(subject = 1:n()) %>% ungroup() %>%
   # Sample distributions
-  mutate(tot_cost = rtriangle2(n(), min, max, mid)) %>%
-
-  # Wide to long
-  select(-activity, -min, -max, -mid) %>%
-  gather(phase, fraction, -subject, -tot_cost) %>%
-
-  # Compute actual cost in phase
-  mutate(cost = tot_cost * fraction) %>%
-
-  # Sum up costs per phase
-  group_by(subject, phase) %>%
-  summarize(add_cost = sum(cost))
-```
-
-We then sample market data from the Sertkaya distributions.
-
-```{r, sample-sertkaya-market}
-# NOTE: This script is dependent on the order of indications remaining the same
-# across related data frames.
-
-share_dist <- sertkaya2014_market_share_dist # alias
-success_dist <- sertkaya2014_market_success_dist # alias
-size_dist <- sertkaya2014_market_size_dist # alias
-
-market_size <-
-  # Replicate distributions N times
-  do.call('rbind', replicate(N, size_dist, simplify=FALSE)) %>%
-  # Add subject identifier
-  mutate(subject = sertkaya2014_subjects) %>%
-  # Sample market size
-  mutate(size = runif(n(), min, max)) %>%
-  # Select relevant data
-  select(subject, size)
-
-market_success <-
-  # Replicate distributions N times
-  do.call('rbind', replicate(N, success_dist, simplify=FALSE)) %>%
-  # Add subject identifier
-  mutate(subject = sertkaya2014_subjects) %>%
-  # Sample market success
-  mutate(success = rtriangle2(n(), min, max, mid)) %>%
-  # Select relevant columns
-  select(subject, indication, success)
-
-market_share <-
-  # Cartesian product of share dist (all years) and market success samples
-  merge(share_dist, market_success) %>%
-  # Convert percentages to fractions
-  mutate(min=min/100, max=max/100, success=success/100) %>%
-  # Compute actual market share as per Table 12 in Sertkaya et. al (2014)
-  mutate(share = (min * (1 - success)) + (max * success)) %>%
-  # Select relevant columns
-  select(subject, indication, year, share)
-
-sertkaya2014_market <-
-  # Left join
-  merge(market_share, market_size, by='subject', x.all=TRUE) %>%
-  # Compute actual yearly sales
-  mutate(sales = share * size) %>%
-  # Rename columns
+  mutate(time = rtriangle2(n(), time_min, time_max, time_mid),
+         cost = rtriangle2(n(), cost_min, cost_max, cost_mid),
+         prob = rtriangle2(n(), prob_min, prob_max, prob_mid)) %>%
+  # Normalize sampled data
+  mutate(cost = cost * 10^6,    # Convert million usd to usd
+         time = time / 12,      # Convert months to years
+         prob = prob / 100) %>% # Convert percentage to fraction
+  # Add hard-coded development data
+  mutate(sales = 0) %>%
+  # Rename indication column and remove temp cols
   rename(src = indication) %>%
-  # Compute phase name
-  mutate(phase = paste('M', year, sep='')) %>%
-  # Add hard-coded phase data
-  mutate(time = 12, cost = 0, prob = 100) %>%
-  # Select relevant columns
   select(subject, src, phase, time, cost, prob, sales)
 ```
 
-We then merge the development sample and the market sample into a single Sertkaya sample:
+We then sample market data from the Sertkaya distributions and merge it with our development phases sample.
+<!-- First, we pair up every subject with the market size distribution of its indication.... -->
 
-```{r, join-sertkaya-dev-market}
-sertkaya2014 <-
-  rbind(sertkaya2014_dev, sertkaya2014_market) %>%
-  mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
-  arrange(subject, src, phase)
-```
-
-and then merge the sampled additional data (supply chain activities, etc) into the full Sertkaya sample.
-The additional costs in this additional sample is then added onto the appropriate phase costs already present in the Sertkaya sample,
-and the additional cost column is removed.
-From this point forwards it is therefore impossible to distinguish between base phase costs and additional costs added to that phase.
-
-```{r, join-sertkaya-dev-additional}
-sertkaya2014 <-
-
-  # Merge dev samples with additional supply chain costs samples (by left join)
-  merge(sertkaya2014, sertkaya2014_additional,
-             by=c('subject', 'phase'), all.x = TRUE) %>%
-
-  # Add supply chain activities cost to phase cost
-  # Checks for NAs since the left join spawns NAs in the add_cost column
-  mutate(cost = cost + ifelse(is.na(add_cost), 0, add_cost)) %>%
-
-  # Remove supply chain costs column
-  select(-add_cost)
-```
-
-Since the Sertkaya data was expressed in millions of USD, percentages, and months we here normalize the sample into USD, fractions, and years respectively.
-
-```{r, normalize-sertkaya}
+```{r, sample-sertkaya-market}
 sertkaya2014 <- sertkaya2014 %>%
-  mutate(time = time / 12,     # Convert months to years
-         cost = cost * 10^6,   # Convert from million usd to usd
-         sales = sales * 10^6, # Convert fom million usd to usd
-         prob = prob / 100)    # Convert from percentage to fraction
+  # Only keep source and subject column and distinct rows
+  select(src, subject) %>% unique %>%
+  # Left join with size distribution
+  merge(., sertkaya2014_market_size_dist, by.x='src', by.y='indication', all.x=TRUE) %>%
+  # Sample market size distribution, then remove distribution columns
+  mutate(market_size = runif(n(), min, max)) %>%
+  select(-min, -max) %>%
+  # Normalize sampled market size
+  mutate(market_size = market_size * 10^6) %>% # Convert million usd to usd
+  # Sample non-indication specific market parameters
+  mutate(launch_success = rtriangle2(n(),
+                                     sertkaya2014_launch_success_min,
+                                     sertkaya2014_launch_success_max,
+                                     sertkaya2014_launch_success_mid),
+         generic_entry = rtriangle2(n(),
+                                    sertkaya2014_generic_entry_min,
+                                    sertkaya2014_generic_entry_max,
+                                    sertkaya2014_generic_entry_mid),
+         generic_reduction = rtriangle2(n(),
+                                        sertkaya2014_market_reduction_min,
+                                        sertkaya2014_market_reduction_max,
+                                        sertkaya2014_market_reduction_mid)) %>%
+  # Normalize non-indication specific market parameters
+  mutate(launch_success = launch_success / 100, # Percentage to fraction
+         generic_reduction = generic_reduction / 100, # Percentage to fraction
+         generic_entry = round(generic_entry)) %>% # Round to full year
+  # Cartesian product merge with market share dist
+  merge(., sertkaya2014_market_share_dist) %>%
+  # Normalize market share dist
+  mutate(min = min / 100, max = max / 100) %>% # Percentages to fractions
+  # Compute captured market share per year according to Sertkaya et. al (2014) Table 12
+  mutate(share = (min * (1 - launch_success)) + (max * launch_success)) %>%
+  # Compute reduction in market due to generic entry (Sertkaya et. al, 2014, 3.2.10)
+  mutate(share = ifelse(year < generic_entry, share, (share - (share * generic_reduction)))) %>%
+  # Compute yearly sales
+  mutate(sales = share * market_size) %>%
+  # Convert year to character factor matching MARKET_PHASES
+  mutate(phase = sprintf('M%s', year)) %>%
+  # Add hard-coded market data
+  mutate(time = 1, prob = 1, cost = 0) %>%
+  # Remove temporary columns
+  select(subject, src, phase, time, cost, prob, sales) %>%
+  # Add to initial dev sample
+  rbind(sertkaya2014, .)
+```
+
+Finally, we sample the additional supply chain activity costs data,
+distribute the samples across the development and market phases according to their corresponding fractions,
+and sum up the additional costs per phase for every subject.
+From this point onwards it is therefore impossible to distinguish additional supply chain costs (e.g. non-clinical work costs) from clinical phase costs.
+These additional costs are then added into the full sample.
+
+```{r, sample-sertkaya-additional}
+sertkaya2014 <- sertkaya2014 %>%
+  # Only keep source column and distinct rows
+  select(subject) %>% unique %>%
+  # Cartesian product with additional costs distribution
+  merge(., sertkaya2014_additional_dist) %>%
+  # Normalize additional costs
+  mutate(min = min * 10^6,      # Convert million usd to usd
+         mid = mid * 10^6,      # Convert million usd to usd
+         max = max * 10^6) %>%  # Convert million usd to usd
+  # Sample additional costs
+  mutate(tot_add_cost = rtriangle2(n(), min, max, mid)) %>%
+  # Remove temporary columns
+  select(-min, -mid, -max, -activity) %>%
+  # Wide to long: make phase names rows instead of columns
+  gather(phase, fraction, -subject, -tot_add_cost) %>%
+  # Compute actual additional costs in phase
+  mutate(add_cost = tot_add_cost * fraction) %>%
+  # Sum up costs per phase for every subject
+  group_by(subject, phase) %>%
+  summarize(add_cost = sum(add_cost)) %>%
+  # Left join with full sample (NOTE: causes NAs where no additional costs)
+  merge(sertkaya2014, ., by=c('subject', 'phase'), all.x = TRUE) %>%
+  # Add additional cost to regular cost and remove temp column
+  mutate(cost = ifelse(is.na(add_cost), cost, cost + add_cost)) %>%
+  select(-add_cost)
+# TODO: I could also do a merge earlier on subject and not phase, and then add
+# if phase matches. That might look a bit messier but it should be more
+# efficient and doesn't introduce NAs. Is this a better solution?
 ```
 
 Finally we sample developer discount rates and add it to our Sertkaya sample.
 
 ```{r, sertkaya-add-discount-rate}
-sertkaya2014_agents <-
-  data.frame(subject = sertkaya2014_subjects,
-             discount_rate_priv =
-               rtriangle2(length(sertkaya2014_subjects),
-                          sertkaya2014_discount_rate_dist$min,
-                          sertkaya2014_discount_rate_dist$max,
-                          sertkaya2014_discount_rate_dist$mid))
-
-# Left join
-sertkaya2014 <- merge(sertkaya2014, sertkaya2014_agents, by='subject', all.x=TRUE)
+min <- sertkaya2014_private_discount_rate_min / 100 # Percentage to fraction
+max <- sertkaya2014_private_discount_rate_max / 100 # Percentage to fraction
+mid <- sertkaya2014_private_discount_rate_mid / 100 # Percentage to fraction
+sertkaya2014 <- sertkaya2014 %>%
+  # Group by subject
+  group_by(subject) %>%
+  # Sample single discount rate per subject, then ungroup
+  mutate(discount_rate_priv = rtriangle2(1, min, max, mid)) %>%
+  ungroup()
 ```
 
-<!--
-The table below is an excerpt of the sampled data ordered by subject and then phase.
-
-```{r, sertkaya-sample-excerpt, echo=FALSE}
-sertkaya2014 %>%
-  arrange(subject, phase) %>%
-  head(n=25) %>%
-  kable
-```
--->
 
 ## DRIVE-AB distribution
 The following is an approximation of the data used in DRIVE-AB final report (2018).
 Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
 
+In the table below, time is reported in months, cost in million USD, and probability in percentages.
+
 ```{r, driveab-dist, echo=FALSE}
-prob <- data.frame(phase = DEVELOPMENT_PHASES,
-                   min = c(17.5, 25, 34, 31.4, 83),
-                   mid = c(35.2, 33, 50, 67, 85),
-                   max = c(69, 83.7, 74, 78.6, 99))
+driveab2018_phase_dist <-
+  data.frame(phase = DEVELOPMENT_PHASES,
+             time_min = c(52, 9, 9, 10, 6),
+             time_mid = c(66, 10.5, 13.33, 21.8, 9),
+             time_max = c(72, 21.6, 30, 47, 12.5),
+             # TODO: Cost of P2 is incorrectly reported in DRIVE-AB Final Report!
+             # We're using the numbers from Okhravi et al. (2018)
+             cost_min = c(14.25, 13.1,  12.95,  27.99, 55.5),
+             cost_mid = c(21.1,  24,    24.55,  62.6,  88.35),
+             cost_max = c(29,    37.96, 46.36,  168.4, 127.91),
+             prob_min = c(17.5, 25, 34, 31.4, 83),
+             prob_mid = c(35.2, 33, 50, 67, 85),
+             prob_max = c(69, 83.7, 74, 78.6, 99))
 
-time <- data.frame(phase = DEVELOPMENT_PHASES,
-                   min = c(52, 9, 9, 10, 6),
-                   mid = c(66, 10.5, 13.33, 21.8, 9),
-                   max = c(72, 21.6, 30, 47, 12.5))
-
-# TODO: Cost of P2 is incorrectly reported in DRIVE-AB Final Report!
-# We're using the numbers from Okhravi et al. (2018)
-cost <- data.frame(phase = DEVELOPMENT_PHASES,
-                   min = c(14.25, 13.1,  12.95,  27.99, 55.5),
-                   mid = c(21.1,  24,    24.55,  62.6,  88.35),
-                   max = c(29,    37.96, 46.36,  168.4, 127.91))
-
-params <- data.frame(tot_sales_min = 0,
-                     tot_sales_mid = 2559.5,
-                     tot_sales_max = 4336,
-                     market_years = 10)
+kable(driveab2018_phase_dist, caption = 'driveab2018_phase_dist')
 ```
 
-```{r, print-driveab-dev-dist, echo=FALSE}
-kable(prob, caption = 'Probability of success (%)')
-kable(time, caption = 'Time (months)')
-kable(cost, caption = 'Cost (million USD)')
+
+```{r, driveab-additional-params, echo=FALSE}
+driveab2018_tot_sales_min = 0
+driveab2018_tot_sales_mid = 2559.5
+driveab2018_tot_sales_max = 4336
+driveab2018_market_years = 10
+driveab2018_discount_rate_priv_min = 0.05 * 100
+driveab2018_discount_rate_priv_max = 0.3 * 100
 ```
 
-In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of 10 years.
+In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of `r driveab2018_market_years` years.
 Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
 Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
 The first year will thus be non-zero if the market revenues of the project is non-zero.
 
-```{r, print-driveab-market-dist, echo=FALSE}
-kable(params, caption = 'Additional parameters')
+```{r, print-driveab-additional-params, echo=FALSE}
+data.frame(parameter = 'Total sales (million usd)',
+           min = driveab2018_tot_sales_min,
+           mid = driveab2018_tot_sales_mid,
+           max = driveab2018_tot_sales_max) %>% kable
+
+data.frame(parameter = 'Private developer discount rate (%)',
+           min = driveab2018_discount_rate_priv_min,
+           max = driveab2018_discount_rate_priv_max) %>% kable
 ```
 
 
@@ -457,94 +451,84 @@ kable(params, caption = 'Additional parameters')
 We first sample development data from the DRIVE-AB distribution.
 
 ```{r, sample-driveab-dev}
-# Subjects must not overlap across datasets
-last_sertkaya_subject <- max(sertkaya2014_subjects)
-first_subject <- last_sertkaya_subject + 1
-last_subject <- last_sertkaya_subject + N
-
-driveab2018_dev <- data.frame(
-  subject = rep(first_subject:last_subject, each = num_phases),
-  phase = DEVELOPMENT_PHASES,
-  time = rtriangle2(N * num_phases, time$min, time$max, time$mid),
-  cost = rtriangle2(N * num_phases, cost$min, cost$max, cost$mid),
-  prob = rtriangle2(N * num_phases, prob$min, prob$max, prob$mid),
-  sales = 0
-  )
+first_id <- max(sertkaya2014$subject) + 1
+driveab2018 <- driveab2018_phase_dist %>%
+  # Replicate every row N number of times
+  uncount(N) %>%
+  # Add subject ids but group by phase so identifiers are reused across phases
+  group_by(phase) %>%
+  mutate(subject = first_id:(first_id + n() - 1)) %>%
+  ungroup() %>%
+  # Sample phase data and add hard-coded data
+  mutate(time = rtriangle2(n(), time_min, time_max, time_mid),
+         cost = rtriangle2(n(), cost_min, cost_max, cost_mid),
+         prob = rtriangle2(n(), prob_min, prob_max, prob_mid),
+         sales = 0) %>%
+  # Remove temp columns
+  select(subject, phase, time, cost, prob, sales)
 ```
 
-We then sample market data from the DRIVE-AB distribution.
+We then sample market data from the DRIVE-AB distribution and add it to the sampled development data.
+Lastly, we sample discount rates and also add it into the full sample.
 
 ```{r, sample-driveab-market}
-# TODO: Should be from additional parameters table.
-num_market_years <- length(MARKET_PHASES)
-
-# Use same subjects as in development sample
-driveab2018_subjects <- unique(driveab2018_dev$subject)
-
-# Build data frame
-driveab2018_sales <- data.frame(
-  subject = rep(driveab2018_subjects, each = num_market_years),
-  phase = MARKET_PHASES,
-  time = 12,  # months
-  cost = 0,   # million usd
-  prob = 100, # percentage
-  tot_sales = rep(rtriangle(N,
-                 params$tot_sales_min,
-                 params$tot_sales_max,
-                 params$tot_sales_mid),
-           each = num_market_years)
-  ) %>%
-
-  # Interpolate yearly sales
-  mutate(slope = (tot_sales * 2 / (num_market_years + 1)) / num_market_years,
-        sales = 1:num_market_years * slope) %>%
-
-  # Remove temp columns
-  select(-tot_sales, -slope)
-```
-
-We then merge the development sample and the market sample into a single DRIVE-AB sample.
-We also normalize time, costs, revenues, and probabilities.
-
-```{r, merge-driveab-sample}
-driveab2018 <-
-
-  # Join development and market data
-  rbind(driveab2018_dev, driveab2018_sales) %>%
-
-  # Add data source names and factorize phases
-  mutate(src = 'DRIVE-AB (2018)',
-         phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
-
-  # Sort
-  arrange(subject, src, phase) %>%
-
+driveab2018 <- driveab2018 %>%
+  # Select only subject column and unique rows
+  select(subject) %>% unique %>%
+  # Sample market size
+  mutate(tot_sales = rtriangle2(n(),
+                                driveab2018_tot_sales_min,
+                                driveab2018_tot_sales_max,
+                                driveab2018_tot_sales_mid)) %>%
+  # Compute market slope
+  mutate(slope = (tot_sales * 2 / (driveab2018_market_years + 1)) / driveab2018_market_years) %>%
+  # Replicate as many times as we want market years
+  uncount(driveab2018_market_years) %>%
+  # Add market years to every subject
+  group_by(subject) %>%
+  mutate(market_year = 1:driveab2018_market_years) %>%
+  ungroup %>%
+  # Add hard-coded data
+  mutate(time = 12, cost = 0, prob = 100) %>%
+  # Compute (interpolate) yearly sales
+  mutate(sales = market_year * slope) %>%
+  # Convert market year to character factor
+  mutate(phase = paste('M', market_year, sep='')) %>%
+  # Drop temp columns
+  select(subject, phase, time, cost, prob, sales) %>%
+  # Add to initial dev sample
+  rbind(driveab2018, .) %>%
+  # Add data source name
+  mutate(src = 'DRIVE-AB (2018)') %>%
+  # Convert phase to ordered factor
+  mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
+  # Sample discount rate on a per-subject basis
+  group_by(subject) %>%
+  mutate(discount_rate_priv = runif(1,
+                                    driveab2018_discount_rate_priv_min,
+                                    driveab2018_discount_rate_priv_max)) %>%
+  ungroup %>%
   # Normalize sampled values
-  mutate(time = time / 12,     # Convert months to years
-         cost = cost * 10^6,   # Convert from million usd to usd
-         sales = sales * 10^6, # Convert from million usd to usd
-         prob = prob / 100)    # Convert from percentage to fraction
-```
-
-Finally we sample developer discount rates and add it to our DRIVE-AB sample.
-
-```{r, sample-driveab-discountrates}
-driveab2018_agents <-
-  data.frame(subject = driveab2018_subjects,
-             discount_rate_priv = runif(length(driveab2018_subjects), 0.05, 0.3))
-
-# Left join
-driveab2018 <- merge(driveab2018, driveab2018_agents, by='subject', all.x=TRUE)
+  mutate(time = time / 12,     # months -> years
+         cost = cost * 10^6,   # million usd -> usd
+         sales = sales * 10^6, # million usd -> usd
+         prob = prob / 100,    # percentage -> fraction
+         discount_rate_priv = discount_rate_priv / 100 # percentage -> fraction
+         ) %>%
+  # Arrange data nicely for printing purposes
+  arrange(subject, phase)
 ```
 
 
-
-## Additional parameters
+## New assumptions
 Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
 
 ```{r, combine}
-phases <- rbind(sertkaya2014, driveab2018) %>%
-          arrange(subject, src, phase)
+phases <-
+  rbind(sertkaya2014, driveab2018) %>%
+  arrange(subject, src, phase) %>%
+  # Convert phase column to ordered factor
+  mutate(phase = factor(phase, levels=PHASES, ordered=TRUE))
 ```
 
 ```{r, precompute, include=FALSE, dependson=-1}
@@ -654,6 +638,7 @@ phases %>%
         panel.grid.major.x=element_blank()) +
   ylab('Sales (million USD)')
 
+# TODO: Replace this plot with lines of max/min or similar
 phases %>%
   filter(phase %in% MARKET_PHASES) %>%
   ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
@@ -948,7 +933,7 @@ to_years <- function (phases) {
 
   # Transform: to phase-local years
   phase_years <- tibble()
-  for (x in 1:ceiling(max(phases$time) + 1)) {
+  for (x in 1:ceiling(max(phases$time) + 1)) { # Longest phase
 
     # Compute step-based properties
     has_decimals <- phases$time - floor(phases$time) != 0
@@ -1176,6 +1161,7 @@ both <- bind_rows(pwise, ywise)
 Taking discounting into consideration however, makes the two methods yield slightly different results.
 The following two plots illustrate that difference for the metrics NPV and ENPV.
 Again, in all datasets, from multiple starting phases.
+
 
 ```{r, methods-comparison, echo=FALSE}
 for (curr in c('cum', 'env', 'npv', 'enpv')) {
@@ -2159,4 +2145,5 @@ for (curr in sources) {
 
 # Conclusion
 What's the qualitative value-add of stimulating private developers and entrepreneurs that isn't captured in this analysis?
+
 
