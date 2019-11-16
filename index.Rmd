@@ -696,37 +696,30 @@ Programatically, we use the function below to compute the valuation metrics from
 ```{r, valuation-function}
 # NOTE: The column 'order' is required so that the function knows how to order
 # rows of a given subject.
-valuation <- function(df) {
-  result <- tibble()
-  # Compute valuations from all development phases and first market year
-  for (frm in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
-    inner <- df %>%
-      # Remove phases before starting phase
-      filter(phase >= frm) %>%
-      # Valuation is subject specific
-      group_by(src, intervention, subject) %>%
-      # Ensure order is based on order column
-      arrange(order) %>%
-      # Valuation
-      mutate(from = factor(frm, levels=PHASES, ordered=TRUE),
-             time_to = cumsum(time) - time,
-             cum_prob = cumprod(prob),
-             prob_to = cum_prob / prob,
-             # cashflows
-             cashflow = sales + prizes - cost,
-             ev = cashflow * prob_to,
-             pv = cashflow / ((1 + discount_rate_priv) ^ time_to),
-             epv = pv * prob_to,
-             # cumulatives
-             cum = cumsum(cashflow),
-             env = cumsum(ev),
-             npv = cumsum(pv),
-             enpv = cumsum(epv),
-      )
-      # Add to resulting data frame
-      result <- bind_rows(result, inner)
-  }
-  result
+valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
+  df %>%
+    # Cartesian product merge (copy each row per vantage point)
+    merge(., data.frame(from = factor(vantage_points, levels=PHASES, ordered=TRUE))) %>%
+    # Valuation is subject and vantage point specific
+    group_by(src, intervention, subject, from) %>%
+    # Remove events that happened before vantage point
+    filter(phase >= from) %>%
+    # Ensure order is based on order column
+    arrange(order) %>%
+    # Valuation
+    mutate(time_to = cumsum(time) - time,
+           cum_prob = cumprod(prob),
+           prob_to = cum_prob / prob,
+           # cashflows
+           cashflow = sales + prizes - cost,
+           ev = cashflow * prob_to,
+           pv = cashflow / ((1 + discount_rate_priv) ^ time_to),
+           epv = pv * prob_to,
+           # cumulatives
+           cum = cumsum(cashflow),
+           env = cumsum(ev),
+           npv = cumsum(pv),
+           enpv = cumsum(epv))
 }
 ```
 
@@ -751,7 +744,6 @@ phasely_valuation <-
   # Remove temp order column
   select(-order)
 ```
-
 
 ## Year-based method
 To consider the fact that all cashflows of a phase do not occur immediately upon phase-entry we convert our phase-based data to year-based data and make assumptions as to how the values are interpolated over the years of a phase.
