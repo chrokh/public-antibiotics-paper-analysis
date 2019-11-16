@@ -339,6 +339,29 @@ data.frame(parameter = c('Public discount rate (%)',
                    public_inefficiency_max)) %>% kable
 ```
 
+## Interventions distribution
+We apply five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
+We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
+The intervention can be described as a unconditional, non-dilutive prize.
+This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
+Prize size is quantitatively varied stochastically.
+
+We are logarithmically sampling prize sizes.
+This is because we assume that the absolute difference in effect will be much smaller when prize sizes are very small, as compared to when prize sizes are very large, and hence need more samples at the "bottom" to properly saturate the space.
+In the analysis we at all times "control for" prizes which means that the chosen distribution does not affect any of the conclusions beyond sample saturation.
+The table below show the intervention distribution that we are sampling from.
+
+```{r, intervention-dist, echo=FALSE}
+intervention_dist <- # Expressed in million usd
+  data.frame(target = factor(c('P1','P2','P3','P4','M1'),
+                             levels=PHASES, ordered=TRUE),
+             intervention = c('P1ER','P2ER','P3ER','P4ER','PDMER'),
+             prize_min = 1,
+             prize_max = 19.999,
+             magn_min = -1,
+             magn_max = 3)
+kable(intervention_dist, caption='Interventions (million usd)')
+```
 
 # Sampling
 In this chapter, we sample the distributions outlined in the last chapter.
@@ -583,31 +606,7 @@ phases <- merge(phases, agents, by='subject', all.x=TRUE)
 ```
 
 
-# Interventions
-We now introduce five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
-To "err on the rigth side", we choose to use the yearly rather than the phasely method since this yield higher values for NPV and ENPV.
-We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
-The intervention can be described as a unconditional, non-dilutive prize.
-This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
-Prize size is quantitatively varied stochastically.
-
-We are logarithmically sampling prize sizes.
-This is because we assume that the absolute difference in effect will be much smaller when prize sizes are very small, as compared to when prize sizes are very large, and hence need more samples at the "bottom" to properly saturate the space.
-In the analysis we at all times "control for" prizes which means that the chosen distribution does not affect any of the conclusions beyond sample saturation.
-The table below show the intervention distribution that we are sampling from.
-
-```{r, intervention-dist, echo=FALSE}
-intervention_dist <- # Expressed in million usd
-  data.frame(target = factor(c('P1','P2','P3','P4','M1'),
-                             levels=PHASES, ordered=TRUE),
-             intervention = c('P1ER','P2ER','P3ER','P4ER','PDMER'),
-             prize_min = 1,
-             prize_max = 19.999,
-             magn_min = -1,
-             magn_max = 3)
-kable(intervention_dist, caption='Interventions (million usd)')
-```
-
+## Interventions sample
 Sampled prize sizes vary across subjects, but not within subjects.
 This means that a given subject has the same prize size applied as many times as there are interventions.
 In other words, every subject is copied n+1 times, where n is the number of interventions, and the additional copy is the original without an intervention applied, i.e. the "control treatment" or "placebo".
@@ -633,28 +632,6 @@ intervened <- phases %>%
   # Add control group
   rbind(., phases %>% mutate(prizes = 0, intervention = 'NONE'))
 ```
-
-The histogram below depict the result of logarithmically sampling intervention prizes.
-
-```{r, prize-summary, echo=FALSE, message=FALSE}
-print(intervened %>%
-      filter(prizes > 0) %>%
-      ggplot(aes(prizes, fill=phase)) +
-      geom_histogram() +
-      facet_wrap(interaction(intervention, phase)~., ncol=3) +
-      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
-                         breaks = pretty_breaks(8)) +
-      xlab('USD (billions)') +
-      ylab(element_blank()) +
-      theme(axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            axis.text.y = element_blank()) +
-      guides(fill = FALSE))
-```
-
-We then convert the data to yearly, and restructure it so that every row without an intervention is matched with the corresponding row with an intervention for every qualitatively different intervention.
-Meaning that we duplicate ever original sample once for every phase of intervention.
-Consequently, we can no longer plot the full data set without controlling for intervention.
 
 
 # Valuation metrics
@@ -1198,8 +1175,13 @@ comparison %>%
 # Summary statistics
 TODO: Explanatory text. This chapter will contain all summary statistics eventually.
 
-## Input data
-We now present some summary statistics to sanity check that our samples seem to be properly drawn from their respective distributions.
+We now present some summary statistics.
+First, to sanity check that our samples seem to be properly drawn from their respective distributions.
+Then, to explore what valuations we reach using our different valuations methods and metrics.
+
+Unless otherwise specified, this chapter presents statistics **without** interventions and inefficiencies applied.
+
+## Development data
 We first plot development data.
 
 ```{r, summary-violins, echo=FALSE, warning=FALSE, message=FALSE}
@@ -1241,6 +1223,7 @@ phases %>%
   ylab('Probability of success (%)')
 ```
 
+## Sales data
 Below we plot the sampled sales data.
 
 ```{r, summary-sales, echo=FALSE}
@@ -1296,6 +1279,7 @@ phases %>%
   theme(legend.position = 'top')
 ```
 
+## Phase comparison
 Interestingly, some parameters are quite dispersly distributed between phases.
 Below, we plot the mean percentage of a given property occuring in a given phase for all phases.
 
@@ -1329,6 +1313,25 @@ phase_props %>%
   facet_wrap(. ~ prop) +
   theme(axis.text.x = element_text(angle=90, hjust=1),
         legend.position = 'top')
+```
+
+## Prize sizes
+The histogram below depict our sampled intervention prizes at their corresponding phases.
+
+```{r, prize-summary, echo=FALSE, message=FALSE}
+print(intervened %>%
+      filter(prizes > 0) %>%
+      ggplot(aes(prizes, fill=phase)) +
+      geom_histogram() +
+      facet_wrap(interaction(intervention, phase)~., ncol=3) +
+      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
+                         breaks = pretty_breaks(8)) +
+      xlab('USD (billions)') +
+      ylab(element_blank()) +
+      theme(axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.y = element_blank()) +
+      guides(fill = FALSE))
 ```
 
 
