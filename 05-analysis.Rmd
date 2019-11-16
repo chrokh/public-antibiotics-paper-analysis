@@ -1,0 +1,845 @@
+# Analysis
+The question we want to explore is whether it is cheaper for the benefactor to directly or indirectly fund antibiotics R&D.
+Directly here refers to the idea of simply paying for development "at cost".
+Indirectly refers to the idea of issuing prizes that encourage private developers to undertake a given activity with the hope of winning said prize.
+
+We compare these two different approaches by comparing their expected costs when facing a hypothetical project entering pre-clinical.
+We assume that the valuation metric that private actors employ is ENPV and that the valuation method is yearly.
+We refer to this value as *private ENPV.*
+As previously described, ENPV takes both the opportunity cost of capital and the risk of project failure into consideration.
+In other words, ENPV computes the discounted expected value of (in this case) a series of investments with potential future return.
+
+We assume that positive private ENPV in pre-clinical yields a go-decision while negative value yields a no-decision.
+From a given sample we can then compute the ratio between the number of projects that face go-decision and the number that do not.
+We refer to this as the go-rate.
+
+While we now have a way of reasoning about the effectiveness of a given prize, we must combine that information with its cost in order to explore its efficiency.
+In order to reason about the cost, for the benefactor of issuing a prize we compute the necessarily negative ENPV of issuing said prize.
+This can be thought of as the expected, capitalized cost of issuing the intervention publicly and then paying for every successful candidate without receiving any financial return whatsoever.
+The metric takes both the opportunity cost (cost of capital) and project risk of failure into consideration.
+Taking opportunity cost into consideration is important as the benefactor looses the opportunity to activate their money elsewhere when making a payment to a beneficiary.
+Taking risk into consideration is important as the benefactor will not necessarily pay the promised prize size, due to projects being highly risky.
+The only cashflow considered in the ENPV calculation is the prize, but since we compute ENPV we take the fact that not all developers reach the point of the prize and that even if they do that time will be in the future.
+We refer to the expected cost of a prize (i.e. indirect funding) as *indirect ENPV*.
+As previously described, we assume that the benefactor is the public sector and employ a uniformly distributed discount rate between `r public_discount_rate_min * 100`% and `r public_discount_rate_max * 100`%.
+Indirect ENPV can be thought of as the expected cost of issuing a prize (for the benefactor).
+
+As we will compare the cost of issuing a prize (indirect funding) to that of directly paying for projects (direct funding) we must also have a way of estimating the cost of paying for projects at-cost.
+We again take both the opportunity cost of capital and project risk of failure into consideration and therefore again employ ENPV.
+We again disregard any project revenues, since we're again computing the cost of supporting the project as a benefactor
+The cashflows used in the ENPV calculation are therefore all the costs.
+We assume that the benefactor issuing the direct intervention is the same as the one issuing indirect interventions.
+Hence, we use the same discount rate distribution in both cases
+(`r public_discount_rate_min * 100`% - `r public_discount_rate_max * 100`%).
+We refer to the expected cost of paying for the project at cost (i.e. direct funding) as *direct ENPV*.
+
+| Valuation metric | Summary |
+|-----|-----|
+| Private ENPV  | The expected (private) value of a project.         |
+| Indirect ENPV | The expected cost of issuing a prize.              |
+| Direct ENPV   | The expected cost of paying for a project at-cost. |
+
+
+THERE NEEDS TO BE AN EXPLANATORY TEXT FOR THE CODE SNIPPET BELOW.
+
+```{r, comparable-years}
+control <- filter(years, intervention == 'NONE')
+treated <- filter(years, intervention != 'NONE')
+
+comparable_years <-
+  semi_join(treated, control, by=c('src', 'subject', 'phase', 'phase_year')) %>%
+  group_by(src, subject) %>%
+  arrange(phase, phase_year) %>%
+  mutate(time_to = cumsum(time) - time)
+```
+
+We compute private, direct, and indirect ENPV like this:
+
+```{r, compute-enpvs}
+comparable_years <- comparable_years %>%
+  arrange(time_to) %>%
+  group_by(src, subject, intervention) %>%
+  mutate(
+         tot_prob = prod(prob),
+         prob_to = cumprod(prob) / prob, # TODO: Is this correct?!?!
+         cashflow_bef = sales - cost,
+         cashflow_aft = sales - cost + prizes,
+         enpv_prv_bef =
+           cumsum((cashflow_bef / ((1 + discount_rate_priv) ^ time_to)) * prob_to),
+         enpv_prv_aft =
+           cumsum((cashflow_aft / ((1 + discount_rate_priv) ^ time_to)) * prob_to),
+         enpv_ind =
+           cumsum((-prizes / ((1 + discount_rate_publ) ^ time_to)) * prob_to),
+         enpv_dir =
+           cumsum((-cost / ((1 + discount_rate_publ) ^ time_to)) * prob_to)
+         ) %>%
+  select(-prob_to)
+```
+
+We extract the final ENPV values, i.e. the value of planning to run the project from pre-clinical to the end, like this:
+
+```{r, compute-final-enpvs}
+finals <- comparable_years %>%
+  arrange(time_to) %>%
+  group_by(src, subject, intervention, inefficiency) %>%
+  # TODO: Previously I also grouped by tot_prob but this seems nonsensical.
+  # Should I actually do that?
+  mutate(prizes = sum(prizes)) %>%
+  do(tail(., n = 1)) %>%
+  select(prizes, enpv_prv_bef, enpv_prv_aft, enpv_ind, enpv_dir, tot_prob)
+```
+
+## Indirect: effectiveness
+Determining the efficiency of an intervention means that we must take both its effectivess and its cost into consideration.
+We will measure effectiveness as the likelihood that a given intervention turns a pre-clinical no-decision into a go-decision (on the basis of private ENPV), and we will measure cost as the previously computed indirect ENPV.
+
+Before we proceed further however, let us first ensure that the issued prizes (i.e. the interventions) actually do have an effect on private ENPV.
+As such there should be a correlation between prize size, regardless of intervention phase, and the improvement in private ENPV in all datasets.
+By subtracting the private ENPV value before the application of the intervention from the private ENPV after the application of the intervention we get the improvement in private ENPV, i.e. the delta.
+Since we're modeling non-dilutive prizes with no strings attached, the intervention will always improve private ENPV which means that the delta as a consequence always will be greater than zero.
+
+```{r, prize-vs-private-enpv, echo=FALSE}
+print(finals %>%
+  ggplot(aes(prizes, enpv_prv_aft-enpv_prv_bef, col=intervention)) +
+  geom_point(alpha=1, shape=1) +
+  #geom_smooth(method='lm', se=FALSE, col='black') +
+  facet_wrap(intervention ~ src, ncol=7, scale='free') +
+  xlab('Prize') +
+  ylab('Private ENPV') +
+  #scale_x_continuous(label = unit_format(scale=1e-9, unit=''),
+  #                   breaks = pretty_breaks(8)) +
+  #scale_y_continuous(label = unit_format(scale=1e-6, unit='')) +
+  theme(legend.position = 'top',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm'))
+  )
+)
+```
+
+In the plots above, the data does not seem correlated.
+If we however plot the same data on a log-log scale (see below) the correlation is evident.
+As a side-note it is important to remember that the reason that there are very few samples at high x-values in the first set of plots is that we sampled intervention prize sizes logarithmically.
+In the first set of plots the data *is* in fact correlated but the variance increases with x.
+
+```{r, prize-vs-private-enpv-improvement, echo=FALSE}
+print(finals %>%
+  ggplot(aes(prizes, enpv_prv_aft-enpv_prv_bef, col=intervention)) +
+  geom_point(alpha=1, shape=1) +
+  #geom_smooth(method='lm', se=FALSE) +
+  facet_wrap(intervention ~ src, ncol=7, scale='free') +
+  xlab('Prize (log)') +
+  ylab('Private ENPV (log)') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  theme(legend.position = 'top',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm'))
+  )
+)
+```
+
+Other studies have shown, that the later a prize is awarded, the higher the size of the prize must be to achieve a comparative increase in ENPV.
+This phenomena is clearly visible in our model when plotting the correlation between prize size and private ENPV improvement for all interventions on the same scale.
+The data organizes itself into "layers", where for any given prize size, the resulting ENPV is higher for late stage interventions and lower for early stage interventions.
+
+```{r, prize-vs-private-enpv-improvement2, echo=FALSE, warning=FALSE}
+# TODO: This plot yields warnings!
+print(finals %>%
+  ggplot(aes(prizes, enpv_prv_aft - enpv_prv_bef, color=intervention)) +
+  geom_smooth(method='lm', se=FALSE) +
+  geom_point(shape=1) +
+  xlab('Prize') +
+  ylab('Private ENPV improvement') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  facet_wrap(. ~ src, ncol=4, 'free') +
+  theme(legend.position = 'top')
+)
+```
+
+Let us now move to estimating the interventions' improvement on pre-clinical go-decisions.
+We assume that a pre-clinical go-decision will be reached if ENPV upon entering pre-clinical is at or above zero, and a no-decision reached if not.
+
+```{r, precompute-go-decision}
+finals$go <- factor(finals$enpv_prv_aft >= 0)
+```
+
+If we jitter plot prize size on the x-axis and the binary go-decision on the y-axis, we (expectedly) observe that as prizes increase, initial no-decisions are eventually turned into go-decisions.
+If we look closely we even see that the range of prizes that turns no's into go's seems to be higher in later phases and lower in earlier.
+This is of course also expected since we've already established that late-phase prizes must be higher to achieve an ENPV improvement comparable to early-phase prizes.
+
+```{r, prize-vs-go-decision, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, go, color=intervention)) +
+  geom_jitter(shape=1) +
+  facet_grid(cols=vars(src), rows=vars(intervention)) +
+  theme(legend.position = 'none') +
+  ylab('Pre-clinical go-decision') +
+  xlab('Prize') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     labels = trans_format('log10', math_format(10^.x)))
+```
+
+The analysis above is however also diffused by the fact that we are not differentiating between turning a no-decision into a go-decision and simply paying money to a project that already faced a go-decision.
+Let us focus on projects that faced an initial no-decision.
+
+```{r, filter-nos}
+nos <- filter(finals, enpv_prv_bef < 0)
+```
+
+Running the same plot on the new subset we get a clearer picture of when no's actually are turned into go's.
+
+```{r, prize-vs-go-decision-in-nos, echo=FALSE}
+nos %>%
+  ggplot(aes(prizes, go, color=intervention)) +
+  geom_jitter(shape=1) +
+  facet_grid(cols=vars(src), rows=vars(intervention)) +
+  theme(legend.position = 'none') +
+  ylab('Pre-clinical go-decision') +
+  xlab('Prize') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     labels = trans_format('log10', math_format(10^.x)))
+```
+
+To more properly understand at what ranges the different interventions have their effects we can build a logistic regression model where prize size predicts no/go and then use that model to predict the probability of a particular prize yielding a go- as opposed to a no-decision.
+We will refer to the predicted percentage of go-decisions under a given prize as the predicted go-rate of a prize or an intervention.
+
+```{r, predict-go-in-nos}
+go_model <- glm(
+  go ~ prizes * interaction(src, intervention),
+  data = nos,
+  family = binomial(link='logit'))
+nos$go_pred_prize <- predict(go_model, type='response')
+```
+
+With this we can reason about the average size at which a given intervention actually has an effect.
+More precisely we can reason about the probability of a particular prize size turning a no-decision into a go-decision.
+In the following plot we clearly see how late-phase prizes must be substantially higher to have the same probability of turning no-decisions into go-decisions as early-phase prizes.
+
+```{r, prize-vs-predicted-go-in-nos, echo=FALSE}
+nos %>%
+  ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize') +
+  ylab('Probability of no-to-go (%)') +
+  facet_wrap(. ~ src)
+```
+
+When previously filtering out projects that already faced go-decisions we notice that a plethora of projects already faced go-decisions even without intervention.
+Many (the author included) have suggested that prizes should be coupled with profitability analyses in order to avoid wasteful spending of public resources.
+However, such a filtering process is likely to be prohibitively difficult in reality.
+And even if conducted, the incentive for developers to "rig" the numbers and bend the truth is substantial.
+Granting prizes to developers with projects that would have been pursued regardless of the existance of the prize is consequently assumed to be an unfortunate but possibly unavoidable reality.
+
+Under this assumption we cannot employ the "cleaner" no-to-go model but must use all the data and use prize size to predict go-decisions in the existance of the noise caused by projects facing go-decisions irrespectively.
+I.e. under the assumption that we cannot a priori distinguish between a sufficiently profitable project and one in need of an intervention we will assume that interventions are promised to all.
+
+```{r, predict-go}
+mod <- glm(
+  go ~ prizes * interaction(src, intervention),
+  data = finals,
+  family = binomial(link='logit'))
+finals$go_pred_prize <- predict(mod, type='response')
+```
+
+```{r, prize-vs-predicted-go, echo=FALSE}
+finals %>%
+  ggplot(aes(prizes, go_pred_prize*100, color=intervention)) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize') +
+  ylab('Probability of pre-clinical go-decision (%)') +
+  facet_wrap(. ~ src)
+```
+
+
+## Indirect: cost
+We will now explore the correlation between prize size and indirect ENPV.
+I.e. the correlation between the size of the prize in an indirect funding scheme and the cost of that scheme for the benefactor.
+Note that indirect ENPV necessarily will be negative as the cost of paying the final prize is the only cashflow considered.
+When plotting indirect ENPV however we present it as a positive number (i.e. as a cost) instead of a negative number (i.e. as a cashflow).
+
+```{r, prize-vs-indirect-enpv-including-nos, echo=FALSE}
+finals %>%
+  #ggplot(aes(prizes / 10^6, -enpv_ind / 10^6, color=intervention)) +
+  ggplot(aes(prizes, -enpv_ind, color=intervention)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE) +
+  facet_wrap(. ~ src, ncol=4) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     #label = unit_format(unit = '')) +
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     #label = unit_format(unit = '')) +
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize') +
+  ylab('Indirect ENPV (both go\'s and no\'s)') +
+  theme(legend.position = 'top')
+```
+
+However, since not all projects will reach a go-decision, we cannot compute the total indirect cost as simply the expected cost of the intervention given the project's probabilities, but must instead compute the expected cost of the intervention given the project's probabilities and the owner's decision of whether to pursuit it or not.
+In other words:
+
+> An intervention will not have to fund projects ran by owners that (despite the existance of the intervention) choose to terminate their projects and consequently never reach the prize point.
+
+In even other words, we assume that the final go-/no-decision of a project is based on whether private ENPV is zero or above.
+When computing indirect ENPV however, we must only consider cashflows that private developers have *chosen* to undertake.
+In other words, **indirect ENPV is *path dependent* on private ENPV**.
+Importantly, private ENPV here refers to the valuation *after* the introduction of the intervention.
+In summary, to compute the cost of indirect funding we must first determine which projects would reach go-decisions (and hence probabilitistically need to be funded) under said funding scheme (intervention).
+
+Again, assuming that a pre-clinical go-decision is reached if ENPV after the introduction of the intervention is greater than or equal to 0, we can filter and keep only observations where we've reached a go-decision in pre-clinical and plot again.
+
+Analyzing the new plot we realize that while paying for substantially fewer projects when issuing lower prizes, we still observe the same "stacking" of interventions as we did before removing non-go projects.
+
+```{r, prize-vs-indirect-enpv, echo=FALSE}
+finals %>%
+  filter(go == TRUE) %>%
+  ggplot(aes(prizes, -enpv_ind, color=intervention)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE) +
+  facet_wrap(. ~ src, ncol=4) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize') +
+  ylab('Indirect ENPV') +
+  theme(legend.position = 'top')
+```
+
+
+In summary, we've already established that later interventions must be larger to achieve a private ENPV improvement comparable to earlier interventions.
+However, for any given prize size in the plot above, the indirect ENPV (i.e. the cost of that prize for the benefactor) is higher the earlier the intervention is provided.
+In summary, for a given prize size, paying early maximizes effect but also unfortunately maximizes benefactor cost.
+
+This analysis is however too simplistic since it ignores that a late phase prize appear cheaper due to fewer go-decisions as a consequence of poorer private ENPV.
+<!--However, if we disregard private ENPV improvement differences, then later interventions are cheaper for the benefactor than earlier ones of the same size.-->
+Such a simplification is unfortunately unacceptable as the purpose of an indirect intervention is to improve private ENPV to a point where sufficiently many no-decisions are turned into go-decisions.
+We must therefore correct for the fact that private ENPV, go-decisions, and indirect ENPV co-vary.
+
+Focusing on only indirect interventions and ignoring direct interventions for a moment, the question is therefore:
+Given some target private ENPV improvement, which indirect intervention phase has the lowest indirect ENPV?
+Alternatively:
+
+> Which indirect intervention phase has the lowest indirect ENPV, while controlling for private ENPV improvement?
+
+One naive way of avoiding to control for private ENPV improvement is to "flip" the analysis and look at cost per expected output rather than the cost per expected input.
+We compute indirect ENPV per output as indirect ENPV (per input) divided by the (technical) probability of reaching market.
+
+```{r, prize-vs-indirect-enpv-in-postgos, echo=FALSE}
+finals %>%
+  filter(go == TRUE) %>%
+  ungroup %>%
+  mutate(enpv_ind_per_exit = enpv_ind/tot_prob) %>%
+  ggplot(aes(prizes, -enpv_ind_per_exit, color=intervention)) +
+  geom_smooth(method='lm', se=FALSE) +
+  # TODO: Reintroduce smooth when we have more data again!
+  geom_point(shape=1) +
+  facet_wrap(. ~ src, ncol=4) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     #label = unit_format(unit = '')) +
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = c(1:9 %o% 10^(0:10)),
+                     #label = unit_format(unit = '')) +
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize') +
+  ylab('Indirect ENPV per exit') +
+  theme(legend.position = 'top')
+```
+
+The problem with this analysis is that when looking at the data per-output, we're not taking the go-rate into consideration.
+
+> A sample of projects reaching go-decisions at some low prize is systematically different from one of projects reaching go-decisions under a high prize.
+
+Read as a "comparison prize", we might therefore conclude that low prizes are efficient (i.e. low cost per output) while high prizes are inefficient (i.e. high cost per output).
+This conclusion is evidently however erroneous as brief projects with low cost and low risk require lower prizes for developers to reach a go-decision, while long projects with high cost and high risk require huge prizes for developers to reach a go-decision.
+
+We have therefore only replaced our need to control for private ENPV improvement with the new need to control for go-rate.
+In conclusion we must control for either private ENPV improvement (when analyzing indirect ENPV per entry/input) or for go-rate (when analyzing indirect ENPV per exit/output).
+<!--Private ENPV and go-rate should be perfectly correlated.-->
+
+
+
+
+## Indirect: efficiency
+To estimate an intervention's efficiency we must consider both its effectiveness and its cost.
+More specifically we must compute its cost per unit of effect.
+We will measure cost as indirect ENPV, and effectiveness as either private ENPV improvement or go-rate.
+
+As previously argued, we will not remove projects that would reach go-decisions irrespectively of the existance of an intervention, as ignoring them would bias the data.
+<!--Instead of filtering out the no-go projects and looking at the cost per go-decision, we will -->
+
+We will only look at go-rates lower than `r go_lim_up = 0.99; go_lim_up*100`%.
+Since a go-rate higher than 100% is not achievable, any prize size larger than the lowest size that yields a go-rate of 100% will also merely yield 100%.
+
+```{r, go-rate-vs-indirect-enpv, echo=FALSE}
+finals %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  ggplot(aes(go_pred_prize*100, ifelse(enpv_prv_aft >= 0, -enpv_ind, 0), color=intervention)) +
+  geom_point(shape=1) +
+  geom_smooth(method='loess', se=FALSE, color='black') +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('Indirect ENPV per entry\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none') +
+  facet_grid(cols=vars(intervention), rows=vars(src))
+
+finals %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  filter(enpv_prv_aft >= 0) %>%
+  ggplot(aes(go_pred_prize*100, ifelse(enpv_prv_aft >= 0, -enpv_ind, 0), color=intervention)) +
+  geom_point(shape=1) +
+  geom_smooth(method='loess', se=FALSE, color='black') +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('Indirect ENPV per go-decision\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none') +
+  facet_grid(cols=vars(intervention), rows=vars(src))
+```
+
+Using local regression (loess) we can see that the interventions again seem to "stack".
+This analysis therefore suggests that paying later isn't just more expensive in terms of the "promised prize size", but remains more expensive even when you take attrition rates (i.e. projects terminated for financial or scientific reasons) into account.
+
+```{r, go-rate-vs-indirect-enpv-smooth, echo=FALSE}
+a <- data.frame(finals) %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  filter(enpv_prv_aft >= 0) %>%
+  mutate(per = 'per PC go-decision')
+
+b <- data.frame(finals) %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  mutate(per = 'per PC entry',
+         enpv_ind = ifelse(enpv_prv_aft >= 0, enpv_ind, 0))
+
+rbind(a, b) %>%
+  ggplot(aes(go_pred_prize*100, -enpv_ind, color=intervention, linetype=per, shape=per)) +
+  #geom_point() +
+  geom_smooth(method='loess', se=FALSE) +
+  scale_linetype_manual(values=c('dotted', 'solid')) +
+  facet_wrap(. ~ src) +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('Indirect ENPV (million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position = 'top', legend.title = element_blank())
+```
+
+To tackle the question of whether paying directly or indirectly is preferable, we must compare the above indirect ENPVs to the direct ENPV of simply paying for the project at-cost.
+Above, we have however computed the expected cost per pre-clinical entry.
+While a perfectly valid statistic it cannot sensibly be compared against the expected cost of direct funding since the output, i.e. the probability of any given entry becoming an exit, actually varies.
+
+When directly funding antibiotics, projects may be terminated at the discretion of the benefactor, but when indirectly funding they may be terminated at the discretion of the project owner.
+So to make an "apples to apples" comparison of indirect and direct we would only be able to compare indirect prize sizes that yield go-rates of approximately 100%.
+Only then would every input project into pre-clinical stand an equivalent chance of making it through to the market regardless of whether directly or indirectly funded, and only then could we compare the prize per entry.
+
+Given that we however want to explore various go-rates we will hereon move from computing the expected cost per entry to computing the expected cost per exit.
+Specifically, the expected, capitalized cost per market approval.
+In other words, while we have analyzed the cost per unit of input, we will now move to analyzing the cost per unit of output.
+
+```{r, go-rate-vs-exit, echo=FALSE}
+finals %>%
+  filter(go_pred_prize < go_lim_up) %>%
+  filter(enpv_prv_aft >= 0) %>%
+  ggplot(aes(go_pred_prize*100, -enpv_ind/tot_prob, color=intervention)) +
+  geom_smooth(method='loess', se=FALSE) +
+  facet_wrap(. ~ src) +
+  xlab('Probability of go-decision (%) under prize size') +
+  ylab('Indirect ENPV per exit (million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position = 'top')
+```
+
+For indirect funding, the cost per output curve is shaped similarly to the cost per input curve.
+Importantly however, costs are significantly higher (see y-axis), since we now have to take the technical failure rate into consideration.
+Higher go-rates still cause the bottom line, i.e. the cost per output, to be more expensive than lower go-rates.
+However, whether our public health system can afford a lower go-rate depends greatly on the rate of discovery, i.e. on the entry rate into pre-clinical, and is a gravely important question outside the scope of this study.
+Irrespectively, this figure can be used to estimate how much we will "actually" pay for every new antibiotic when using this form of indirect funding, when choosing to accept a particular go-rate (i.e. chance of any given project reaching a go-decision in pre-clinical).
+
+
+## Direct: efficiency
+There is no need to analyze the effectiveness of direct funding in terms of go-decisions seeing that the core idea of direct funding is to move no-/go-decisions into the hands of the benefactor.
+While in reality, the benefactor may strategically choose not to pursue all opportunities we will for the sake of calculation assume that all opportunities are pursued.
+Direct funding can thus be thought of as having the same effect (in terms of go-rate) as a go-rate of approximately 100%.
+However, to compute the efficiency of direct funding, so that we can compare it to the efficiency of indirect funding, we must identify the cost of direct funding.
+
+<div class="alert alert-danger">
+TODO: Actually we need to analyze effectiveness. Think: attrition rate but for time. Go-rate + probability = how many outputs per entry. But go-rate + probability + time = time until output per entry.
+</div>
+
+We begin by applying the sampled inefficiencies to our original dataset, and then converting the resulting dataset into the same year-based format used for the analysis of indirect funding.
+We assume that public sector inefficiencies have detrimental effects on development costs and times but not probabilities of success.
+In other words, we assume that the likelihood of succeeding in turning a hypothetical NCE into a market ready antibiotic is the same for both the public and the private sector (costs and development times aside).
+In even other words, we assume that the public sector eventually get to the point that the private do.
+But the time it takes the public sector to get there may be longer and during that time they may accumulate a higher cost.
+
+We model this inefficiency as an "efficiency factor" that increases costs and times, while reducing probabilities.
+If the efficiency factor, e.g. is 75% then a cost of 10 million will be transformed into a cost of 17.5 million, because 10 \* (1 + 0.75) = 17.5.
+
+```{r, add-inefficiency}
+inefficient <- intervened %>%
+  mutate(cost = cost * (1 + inefficiency),
+         time = time * (1 + inefficiency))
+inefficient_years <- to_years(inefficient)
+inefficient_years <- inefficient_years %>%
+  group_by(src, subject, intervention) %>% # TODO: Group by inefficiency?
+  arrange(phase, phase_year) %>%
+  mutate(time_to = cumsum(time) - time)
+```
+
+We then compute the ENPV of directly funding each individual project:
+
+```{r, compute-inefficiency}
+inefficient_years <- inefficient_years %>%
+  arrange(time_to) %>%
+  group_by(src, subject, inefficiency) %>%
+  mutate(
+         tot_cost = sum(cost),
+         tot_prob = prod(prob),
+         prob_to = cumprod(prob) / prob, # TODO: Is this correct?
+         enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ time_to)) * prob_to),
+         ) %>%
+  select(-prob_to)
+```
+
+and extract the ENPVs of taking each project from pre-clinical to market.
+
+```{r, inefficient-finals}
+inefficient_finals <- inefficient_years %>%
+  arrange(time_to) %>%
+  group_by(src, subject, inefficiency, tot_prob, tot_cost) %>%
+  summarise(enpv_dir = tail(enpv_dir, n=1))
+```
+
+Finally we can plot the expected cost (in terms of ENPV) per pre-clinical entry of directly funding each project without any financial returns.
+When exploring direct funding we're not plotting cost against the go-rate of a prize size but instead aginst different public sector inefficiencies.
+When plotting direct ENPV we present it as a positive number that express a cost as opposed to a negative number that express a cashflow.
+
+```{r, inefficiency-vs-direct-enpv-per-entry, echo=FALSE}
+inefficient_finals %>%
+  ggplot(aes(inefficiency*100, -enpv_dir, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('Direct ENPV per entry\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none')
+```
+
+Just as with the cost of indirect funding, we can also convert the cost per entry to a cost per exit.
+
+```{r, inefficiency-vs-direct-enpv-per-exit, echo=FALSE}
+inefficient_finals %>%
+  ggplot(aes(inefficiency*100, -enpv_dir/tot_prob, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('Direct ENPV per output\n(million usd)') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none')
+```
+
+
+## Comparison
+To compare our indirect intervention (non-dilutive prizes) with direct funding, we must compare the efficiency of both approaches.
+Since the private sector does not always choose to pursuit all projects, we must be careful with comparing the efficiency of directly funding all projects with that of indirectly funding only those that reach a go-decision.
+Since a systematically different set of projects reach private go-decisions under a given prize size, the average cost per output is not really representative of the average cost per output of funding all projects directly (since the private sector pressumably have dropped e.g. some of the most expensive and time-consuming projects).
+
+When comparing the cost per exit of indirect funding with direct funding, we will therefore only compute the cost of directly fund those particular projects that reached a go-decision under the given indirect funding scheme.
+It is important to remeber however that even though we are comparing the cost of pursuing the same projects there are still at least two important uncaptured differences between the approaches:
+(1) Direct funding would have a different cost (which is reported in the direct-specific analysis section above) and hence go-rate if we chose to pursuit all projects.
+(2) Public inefficiencies does not only alert the cost of direct funding but also the amount of time it takes for new antibiotics to reach market.
+
+With these two caveats in mind, we begin by combining the direct dataset and the indirect dataset, and compute the difference in cost for every given go-ratio/inefficiency pair.
+
+<div class="alert alert-danger">
+TODO: Actually, not filtering doesn't seem to change anything in the output plot so maybe this isn't logically necessary since we're not looking at go-decisions apart from the go-rate. This needs to be better understood and explained.
+</div>
+
+```{r, combine-inefficient-and-efficient}
+indirect <- finals %>% ungroup %>%
+  select(src, subject, intervention, tot_prob, enpv_ind, go_pred_prize, enpv_prv_aft) %>%
+  rename(prob_ind = tot_prob)
+
+direct <- inefficient_finals %>% ungroup %>%
+  select(src, subject, tot_prob, enpv_dir, inefficiency) %>%
+  rename(prob_dir = tot_prob)
+
+# TODO: Compute efficiencies before merging to avoid renaming
+both <- inner_join(indirect, direct, by=c('src', 'subject')) %>%
+  mutate(enpv_ind_per_exit = enpv_ind/prob_ind,
+         enpv_dir_per_exit = enpv_dir/prob_dir,
+         diff = (-enpv_dir_per_exit) - (-enpv_ind_per_exit)) %>%
+  filter(go_pred_prize < 0.99)
+```
+
+
+### Cost per output
+Then filter out all projects that did not reach a go-decision under the given prize size, and build a linear model that predicts the cost difference between indirect and direct funding from public inefficiency and go-ratio.
+
+```{r, predict-cost-difference}
+both_go <- both %>% filter(enpv_prv_aft >= 0)
+mod_diff <- glm(diff ~ go_pred_prize * inefficiency * src * intervention, data=both_go)
+both_go$diff_pred <- predict(mod_diff, type='response')
+```
+
+In the plot below, green indicates that indirect funding (i.e. stimulating private developers) on average is cheaper, white that they are equivalent, and red that direct funding (publicly funding development) on average is cheaper.
+
+```{r, cost-difference-levelplot, echo=FALSE}
+both_go %>%
+  ggplot(aes(
+    round(go_pred_prize*100/5)*5,
+    round(inefficiency*100/40)*40,
+    fill=diff_pred / 10^9)) +
+  scale_fill_gradient2(high='darkgreen', mid='white', low='red', midpoint=0) +
+  geom_raster(interpolate=FALSE) +
+  facet_grid(rows=vars(src), cols=vars(intervention)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  xlab('Prize size yielding probability of go-decision (%)') +
+  ylab('Public inefficiency (%)') +
+  labs(fill = 'Difference in favor\nof indirect funding\n(billion usd)') +
+  theme(legend.position='bottom')
+```
+
+These levelplots give an indication of the overall relationship between direct and indirect funding for various levels of go-ratio yielding prize sizes and public inefficiencies.
+However, it contains no obvious information on how much cheaper or more expensive a given configuration is.
+
+To allow determining the cost differences under various configurations we can simply plot the two previous efficiency plot side-by-side with aligned y-axes.
+It is important to note however that in this plot we cannot compute the cost of directly funding only the projects that receive a go-decision, since to identify which projects reach a go-decision we must pair the inefficiency with a prize size.
+Consequently, in the rightmost facet of the plot below we are looking at the cost per output/exit when directly funding every project that enters pre-clinical.
+As stated before, this can be thought of as a go-rate of 100%.
+
+Whether the direct or the indirect strategy will yield more projects per time unit is an alltogether different question left unanswered.
+To approach that we would have to consider the reduced time efficiency of the direct approach and compare to the reduced go-rate of the indirect approach.
+
+```{r, cost-difference-comparison, echo=FALSE, warning=FALSE}
+# TODO: This plot yields lots of errors that I've supressed!
+for (curr in sources) {
+  sub <- both_go %>%
+    filter(src == curr) %>%
+    filter(go_pred_prize < go_lim_up)
+
+  p1 <- sub %>%
+    ggplot(aes(go_pred_prize*100, -enpv_ind_per_exit, group=intervention, color=intervention)) +
+    geom_point(shape=20, alpha=0.5) +
+    geom_smooth(method='loess', se=FALSE) +
+    geom_line(stat='smooth', method='loess', color='black', alpha=0.2, size=1) +
+    facet_wrap(. ~ src) +
+    xlab('Prob of go-decision (%) under prize size') +
+    ylab('Indirect ENPV per exit\n(million usd)') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
+                       breaks = scales::pretty_breaks(n = 8)) +
+    theme(legend.position = 'left') +
+    ggtitle('Indirect funding')
+
+  yscale <- layer_scales(p1, 1, 1)$y$range$range
+
+  p2 <- inefficient_finals %>%
+    filter(src == curr) %>%
+    ggplot(aes(inefficiency*100, -enpv_dir/tot_prob)) +
+    geom_point(shape=20, color='darkgrey', alpha=0.6) +
+    geom_line(stat='smooth', method='lm', color='red', size=1) +
+    geom_line(stat='smooth', method='loess', color='black', size=1) +
+    facet_wrap(. ~ src) +
+    xlab('Public inefficiency (%)') +
+    ylab('Direct ENPV per exit\n(million usd)') +
+    scale_y_continuous(
+      label = unit_format(scale = 1e-6, unit = ''),
+      breaks = scales::pretty_breaks(n = 8),
+      position='right',
+      limits=c(min(yscale), max(yscale))) +
+    ggtitle('Direct funding')
+
+  print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
+}
+```
+
+
+### Output probability per input dollar
+TODO:
+
+```{r, temp1, echo=FALSE, warning=FALSE}
+# TODO: WARNINGS SUPRESSED!
+
+# TODO: These two mutations should be added much earlier.
+finals <- finals %>%
+  mutate(exit_per_enpv_ind =
+         ifelse(enpv_prv_aft >= 0,
+                tot_prob / (-enpv_ind),
+                0))
+
+inefficient_finals <- inefficient_finals %>%
+  mutate(exit_per_enpv_dir = tot_prob / (-enpv_dir))
+
+x <- finals %>%
+  filter(exit_per_enpv_ind == Inf)
+print(head(data.frame(x)))
+
+finals %>%
+ #filter(go_pred_prize < go_lim_up) %>%
+ filter(src == curr) %>%
+ #ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+ ggplot(aes(prizes, exit_per_enpv_ind, color = intervention)) +
+ geom_point(shape=1) +
+ geom_smooth(se=FALSE) +
+ facet_wrap(. ~ src * intervention) +
+ xlab('Prob of go-decision (%) under prize size') +
+ ylab('Probability of exit per indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
+ theme(legend.position = 'left',
+       axis.text.x = element_text(angle = 90)) +
+ ggtitle('Indirect funding')
+
+finals %>%
+ #filter(go_pred_prize < go_lim_up) %>%
+ filter(src == curr) %>%
+ #ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+ ggplot(aes(prizes, exit_per_enpv_ind, color = intervention)) +
+ geom_point(shape=1) +
+ geom_smooth(se=FALSE) +
+ facet_wrap(. ~ src) +
+ xlab('Prob of go-decision (%) under prize size') +
+ ylab('Probability of exit per indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
+ theme(legend.position = 'left') +
+ ggtitle('Indirect funding')
+
+finals %>%
+ filter(go_pred_prize < go_lim_up) %>%
+ filter(src == curr) %>%
+ mutate(exit_per_enpv_ind2 = go_pred_prize * tot_prob / (-enpv_ind)) %>%
+ #ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+ ggplot(aes(prizes, exit_per_enpv_ind2, color = intervention)) +
+ geom_point(shape=1) +
+ geom_smooth(se=FALSE) +
+ facet_wrap(. ~ src) +
+ ylab('Probability of exit per indirect ENPV (filtered?)') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
+ theme(legend.position = 'left') +
+ ggtitle('Indirect funding')
+
+finals %>%
+ #filter(go_pred_prize < go_lim_up) %>%
+ filter(src == curr) %>%
+ mutate(exit_per_enpv_ind2 = go_pred_prize * tot_prob / (-enpv_ind)) %>%
+ #ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+ ggplot(aes(prizes, exit_per_enpv_ind2, color = intervention)) +
+ geom_point(shape=1) +
+ geom_smooth(se=FALSE) +
+ facet_wrap(. ~ src * intervention) +
+ ylab('Probability of exit per indirect ENPV') +
+ scale_y_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:-12)),
+                    minor_breaks = c(1:9 %o% 10^(0:-12))
+                    ) +
+ scale_x_continuous(trans='log10',
+                    breaks = c(1 %o% 10^(0:4)) * 10^6,
+                    minor_breaks = c(1:9 %o% 10^(0:4)) * 10^6,
+                    label = unit_format(scale = 1e-6, unit = '')
+                    ) +
+ theme(legend.position = 'left') +
+ ggtitle('Indirect funding')
+```
+
+```{r, temp2, echo=FALSE}
+for (curr in sources) {
+  p1 <- finals %>%
+    filter(src == curr) %>%
+    filter(go_pred_prize < go_lim_up) %>%
+    ggplot(aes(go_pred_prize*100, exit_per_enpv_ind, color = intervention)) +
+    geom_smooth(method='loess', se=FALSE) +
+    facet_wrap(. ~ src) +
+    xlab('Prob of go-decision (%) under prize size') +
+    ylab('Indirect ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    theme(legend.position = 'left') +
+    ggtitle('Indirect funding')
+
+  yscale <- layer_scales(p1, 1, 1)$y$range$range
+
+  p2 <- inefficient_finals %>%
+    filter(src == curr) %>%
+    ggplot(aes(inefficiency*100, exit_per_enpv_dir, color=src)) +
+    #geom_point(shape=1) +
+    geom_smooth(method='lm', se=FALSE, color='black') +
+    facet_wrap(. ~ src) +
+    xlab('Public inefficiency (%)') +
+    ylab('Direct ENPV per exit') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(
+      breaks = scales::pretty_breaks(n = 8),
+      position='right',
+      limits=c(min(yscale), max(yscale))) +
+    ggtitle('Direct funding')
+
+  print(ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1, 0.5), common.legend=TRUE))
+}
+```
