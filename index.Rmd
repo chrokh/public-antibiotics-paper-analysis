@@ -40,7 +40,7 @@ In other words, `N` is the number of random samples that we'll draw from a stoch
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 
 ```{r, set-n}
-N = 500
+N = 100
 ```
 
 ```{r, basics, include=FALSE}
@@ -539,17 +539,6 @@ metrics <- c('cashflow', 'ev', 'pv', 'epv')
 cum_metrics <- c('cum', 'env', 'npv', 'enpv')
 ```
 
-Later we will apply interventions to this dataset and thereby create multiple permutations/versions of every observation.
-This means that we must keep track of which intervention we're currently looking at, and as such we'll add that column immediately, and declare all the current data as suffering from "no intervention".
-In terms of a randomized controlled trial, this is the "control group".
-When we apply different interventions to the control group we will thus create different "treatment groups".
-As the interventions are applied to the control group rather than to completely new samples, we are able to perform "within subject analysis" rather than having to resort to "across subject analysis".
-
-```{r, add-placeholders, dependson=-1}
-phases$prizes <- 0
-phases$intervention <- 'NONE'
-```
-
 Let us add a "public" or "social" discount rate.
 Meaning the cost of capital for the benefactor, i.e. for the body that pays the intervention with no expectation of monetary return.
 This parameter is used in the analysis, where its raison d'etre is also further explained.
@@ -713,6 +702,80 @@ phase_props %>%
 ```
 
 
+# Interventions
+We now introduce five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
+To "err on the rigth side", we choose to use the yearly rather than the phasely method since this yield higher values for NPV and ENPV.
+We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
+The intervention can be described as a unconditional, non-dilutive prize.
+This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
+Prize size is quantitatively varied stochastically.
+
+We are logarithmically sampling prize sizes.
+This is because we assume that the absolute difference in effect will be much smaller when prize sizes are very small, as compared to when prize sizes are very large, and hence need more samples at the "bottom" to properly saturate the space.
+In the analysis we at all times "control for" prizes which means that the chosen distribution does not affect any of the conclusions beyond sample saturation.
+The table below show the intervention distribution that we are sampling from.
+
+```{r, intervention-dist, echo=FALSE}
+intervention_dist <- # Expressed in million usd
+  data.frame(target = factor(c('P1','P2','P3','P4','M1'),
+                             levels=PHASES, ordered=TRUE),
+             intervention = c('P1ER','P2ER','P3ER','P4ER','PDMER'),
+             prize_min = 1,
+             prize_max = 19.999,
+             magn_min = -1,
+             magn_max = 3)
+kable(intervention_dist, caption='Interventions (million usd)')
+```
+
+Sampled prize sizes vary across subjects, but not within subjects.
+This means that a given subject has the same prize size applied as many times as there are interventions.
+In other words, every subject is copied n+1 times, where n is the number of interventions, and the additional copy is the original without an intervention applied, i.e. the "control treatment" or "placebo".
+This allows us to perform "within subject analysis" when comparing treatments against each other and against placebo.
+
+```{r, intervention-sample}
+log10_sample <- function (n, min, max, magnitude_min, magnitude_max)
+  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
+
+intervened <- phases %>%
+  # Cartesian product merge with intervention dist
+  merge(., intervention_dist) %>%
+  # Group by subject (but not by phase) since intervention size should remain
+  # the same within the same subject. Then sample intervention prizes and
+  # normalize by converting from million usd to usd.
+  group_by(subject) %>%
+  mutate(sample = log10_sample(1, prize_min, prize_max, magn_min, magn_max) * 10^6) %>%
+  ungroup %>%
+  # Add sample to prizes column at appropriate phase
+  mutate(prizes = ifelse(phase == target, sample, 0)) %>%
+  # Remove temp columns
+  select(-sample, -target, -prize_min, -prize_max, -magn_min, -magn_max) %>%
+  # Add control group
+  rbind(., phases %>% mutate(prizes = 0, intervention = 'NONE'))
+```
+
+The histogram below depict the result of logarithmically sampling intervention prizes.
+
+```{r, prize-summary, echo=FALSE, message=FALSE}
+print(intervened %>%
+      filter(prizes > 0) %>%
+      ggplot(aes(prizes, fill=phase)) +
+      geom_histogram() +
+      facet_wrap(interaction(intervention, phase)~., ncol=3) +
+      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
+                         breaks = pretty_breaks(8)) +
+      xlab('USD (billions)') +
+      ylab(element_blank()) +
+      theme(axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.y = element_blank()) +
+      guides(fill = FALSE))
+```
+
+We then convert the data to yearly, and restructure it so that every row without an intervention is matched with the corresponding row with an intervention for every qualitatively different intervention.
+Meaning that we duplicate ever original sample once for every phase of intervention.
+Consequently, we can no longer plot the full data set without controlling for intervention.
+
+
 # Valuation metrics
 We employ the following financial metrics for cashflows:
 
@@ -779,6 +842,8 @@ We make the assumption that the evaluator converts every phase into a series of 
 This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
 To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
 
+Unless otherwise specified, all plots in this chapter are based on the control sample, i.e. with no interventions applied.
+
 ## Phase-based method
 We begin by assuming that all cashflows related to a phase occur immediately upon phase entry and compute Expected Value (EV), Present Value (PV), and Expected Present Value (EPV) of all phases from the perspective of all phases.
 We then cumulate these metrics in order to, respectively, compute cumulative EV, Net Present Value (NPV), and Expected Net Present Value (ENPV) from any phase to any phase.
@@ -788,7 +853,7 @@ We then cumulate these metrics in order to, respectively, compute cumulative EV,
 # Should not matter whether it's phasely or yearly.
 phase_based_valuation <- function(phs) {
   result <- tibble()
-  for (frm in PHASES) {
+  for (frm in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
     rows <- phs %>%
       filter(phase >= frm) %>%
       group_by(src, intervention, subject) %>%
@@ -813,7 +878,7 @@ phase_based_valuation <- function(phs) {
   result
 }
 
-phasely_valuation <- phase_based_valuation(phases)
+phasely_valuation <- phase_based_valuation(intervened)
 ```
 
 Before plotting we begin with some data wrangling.
@@ -829,7 +894,7 @@ phasely_valuation_long <- phasely_valuation %>%
 
 # Final valuations
 phasely_final_valuation <- phasely_valuation %>%
-  group_by(src, subject, from) %>%
+  group_by(src, intervention, subject, from) %>%
   arrange(phase) %>%
   summarize(cum = tail(cum, n=1),
             epv = tail(epv, n=1),
@@ -839,7 +904,7 @@ phasely_final_valuation <- phasely_valuation %>%
 # Final long
 phasely_final_valuation_long <- phasely_valuation_long %>%
   filter(metric %in% cum_metrics) %>%
-  group_by(src, subject, from, metric) %>%
+  group_by(src, intervention, subject, from, metric) %>%
   arrange(phase) %>%
   summarize(value = tail(value, n=1))
 ```
@@ -850,7 +915,7 @@ Note the usage of different scales across the different metrics due the vastly d
 
 ```{r, phase-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 phasely_final_valuation_long %>%
-  filter(from == 'PC' & metric %in% cum_metrics) %>%
+  filter(intervention == 'NONE' & from == 'PC' & metric %in% cum_metrics) %>%
   ggplot(aes(metric, value / 10^6, fill=src)) +
   geom_boxplot() +
   ylab('USD (millions)') +
@@ -868,6 +933,7 @@ The second plot depicts the mean valuations within each dataset.
 ```{r, phase-based-summary2-tempppp, echo=FALSE}
 pos <- position_dodge(0.4)
 phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   group_by(from, metric) %>%
   summarize(mu = mean(value),
             std = sd(value)) %>%
@@ -883,6 +949,7 @@ phasely_final_valuation_long %>%
 
 # TODO: Add linerange like in the plot above?
 phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
   stat_summary(fun.y=mean, geom='line') +
   stat_summary(fun.y=mean, geom='point') +
@@ -907,60 +974,60 @@ Note however that we do not interpolate prizes but rather assume that they are i
 #'
 #' @param phases Dataframe in phase-form.
 #' @return Dataframe in year-form
-to_years <- function (phases) {
+to_years <- function (phs) {
 
   # Add timestamps to every observation
-  phases <- phases %>%
+  phs <- phs %>%
     group_by(src, intervention, subject) %>%
     arrange(phase) %>%
     mutate(time_to = cumsum(time) - time)
 
   # Compute cost steps
-  cost_step <- (phases$cost / phases$time)
-  cost_remainder <- phases$cost - cost_step * floor(phases$time)
+  cost_step <- (phs$cost / phs$time)
+  cost_remainder <- phs$cost - cost_step * floor(phs$time)
 
   # Compute sales steps
-  sales_step <- (phases$sales / phases$time)
-  sales_remainder <- phases$sales - sales_step * floor(phases$time)
+  sales_step <- (phs$sales / phs$time)
+  sales_remainder <- phs$sales - sales_step * floor(phs$time)
 
   # Compute prob steps
-  prob_step <- phases$prob ^ (1 / phases$time)
-  prob_remainder <- phases$prob / (prob_step ^ floor(phases$time))
+  prob_step <- phs$prob ^ (1 / phs$time)
+  prob_remainder <- phs$prob / (prob_step ^ floor(phs$time))
 
   # Compute time steps
   time_step <- 1
-  time_remainder <- phases$time - floor(phases$time)
+  time_remainder <- phs$time - floor(phs$time)
 
   # Transform: to phase-local years
   phase_years <- tibble()
-  for (x in 1:ceiling(max(phases$time) + 1)) { # Longest phase
+  for (x in 1:ceiling(max(phs$time) + 1)) { # Longest phase
 
     # Compute step-based properties
-    has_decimals <- phases$time - floor(phases$time) != 0
-    whole_step   <- x <= phases$time
-    partial_step <- x <= phases$time + 1 & has_decimals
+    has_decimals <- phs$time - floor(phs$time) != 0
+    whole_step   <- x <= phs$time
+    partial_step <- x <= phs$time + 1 & has_decimals
 
     cost   <- ifelse(whole_step, cost_step, cost_remainder)
     sales  <- ifelse(whole_step, sales_step, sales_remainder)
     prob   <- ifelse(whole_step, prob_step, prob_remainder)
     time   <- ifelse(whole_step, time_step, time_remainder)
-    prizes <- if (x == 1) phases$prizes else 0 # Immediate lump-sum
+    prizes <- if (x == 1) phs$prizes else 0 # Immediate lump-sum
 
     # Make tibble
     year <-
-      tibble(src                = phases$src,
-             intervention       = phases$intervention,
-             subject            = phases$subject,
+      tibble(src                = phs$src,
+             intervention       = phs$intervention,
+             subject            = phs$subject,
              phase_year         = x,
-             phase              = phases$phase,
-             inefficiency       = phases$inefficiency,
+             phase              = phs$phase,
+             inefficiency       = phs$inefficiency,
              time,
              cost,
              sales,
              prizes,
              prob,
-             discount_rate_publ = phases$discount_rate_publ,
-             discount_rate_priv = phases$discount_rate_priv
+             discount_rate_publ = phs$discount_rate_publ,
+             discount_rate_priv = phs$discount_rate_priv
              ) %>% filter(whole_step | partial_step) # Only keep relevant data
 
     # Append
@@ -970,7 +1037,7 @@ to_years <- function (phases) {
 }
 
 # And then we convert
-years <- to_years(phases)
+years <- to_years(intervened)
 ```
 
 We have now converted our phase-based data to year-based data.
@@ -984,7 +1051,7 @@ We can now compute the same valuation metrics we computed for the phase-based me
 
 ```{r, year-based-valuation}
 yearly_valuation <- tibble()
-for (from in PHASES) {
+for (from in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
   pyfp <- years %>%
     filter(phase >= from) %>%
     group_by(src, subject, intervention) %>%
@@ -1021,7 +1088,7 @@ yearly_valuation_long <- yearly_valuation %>%
 
 # Final valuations
 yearly_final_valuation <- yearly_valuation %>%
-  group_by(src, subject, from) %>%
+  group_by(src, intervention, subject, from) %>%
   arrange(year) %>%
   summarize(cum = tail(cum, n=1),
             epv = tail(epv, n=1),
@@ -1031,7 +1098,7 @@ yearly_final_valuation <- yearly_valuation %>%
 # Final long
 yearly_final_valuation_long <- yearly_valuation_long %>%
   filter(metric %in% cum_metrics) %>%
-  group_by(src, subject, from, metric) %>%
+  group_by(src, intervention, subject, from, metric) %>%
   arrange(year) %>%
   summarize(value = tail(value, n=1))
 ```
@@ -1044,6 +1111,7 @@ Again, note the usage of different scales across the different metrics due the v
 ```{r, year-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 # TODO: Remove x-tick label
 yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   filter(from == 'PC' & metric %in% cum_metrics) %>%
   ggplot(aes(metric, value/10^6, fill=src)) +
   geom_boxplot() +
@@ -1061,6 +1129,7 @@ The middle line in each ribbon tracks the mean value, while the edges capture al
 
 ```{r, year-based-summary2, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 yearly_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   filter(from == 'PC' & metric %in% metrics) %>%
   group_by(src, metric, year) %>%
   summarize(mu = mean(value),
@@ -1082,6 +1151,7 @@ From top-left to bottom right: cumulative out-of-pocket cashflows, cumulative ri
 
 ```{r, year-based-summary3, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
 yearly_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   filter(from == 'PC' & metric %in% cum_metrics) %>%
   group_by(src, metric, year) %>%
   summarize(mu = mean(value),
@@ -1104,6 +1174,7 @@ The second plot depicts the mean of the same valuations but for each individual 
 ```{r, year-based-summary4, echo=FALSE}
 pos <- position_dodge(0.4)
 yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   group_by(from, metric) %>%
   summarize(mu = mean(value),
             std = sd(value)) %>%
@@ -1118,6 +1189,7 @@ yearly_final_valuation_long %>%
   theme(legend.position = 'top')
 
 yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
   stat_summary(fun.y=mean, geom='line') +
   stat_summary(fun.y=mean, geom='point') +
@@ -1134,6 +1206,7 @@ The table below summarizes the valuation metrics from the start of pre-clinical,
 
 ```{r, year-based-table, echo=FALSE}
 sub <- yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
   filter(from=='PC' & metric %in% cum_metrics) %>%
   group_by(src, metric) %>%
   summarize(mean  = mean(value) / 10^6,
@@ -1151,10 +1224,12 @@ In fact, the cumulative metric should yield exactly the same results in both met
 When computing ENV however, we take probability into account, and as a consequence, the outcome could in theory be different, but in practice, i.e. in the plot below, we observe that the difference is insignificant.
 
 ```{r, combine-methods, echo=FALSE}
-pwise <- phasely_final_valuation_long
-ywise <- yearly_final_valuation_long
-pwise$method <- factor('phase', levels=c('phase', 'year'))
-ywise$method <- factor('year', levels=c('phase', 'year'))
+pwise <- phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  mutate(method = factor('phase', levels=c('phase', 'year')))
+ywise <- yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  mutate(method = factor('year', levels=c('phase', 'year')))
 both <- bind_rows(pwise, ywise)
 ```
 
@@ -1166,6 +1241,7 @@ Again, in all datasets, from multiple starting phases.
 ```{r, methods-comparison, echo=FALSE}
 for (curr in c('cum', 'env', 'npv', 'enpv')) {
   p <- both %>%
+    filter(intervention == 'NONE') %>%
     filter(metric == curr & from %in% c(DEVELOPMENT_PHASES, 'M1')) %>%
     ungroup %>%
     ggplot(aes(src, value / 10^6, color=method, fill=method)) +
@@ -1199,12 +1275,12 @@ expected <-
                           -4.5 * 10^6))
 
 actual_phasely <- phasely_final_valuation %>%
-  filter(from == 'PC') %>%
+  filter(intervention == 'NONE' & from == 'PC') %>%
   group_by(src) %>%
   summarize(phasely = mean(enpv))
 
 actual_yearly <- yearly_final_valuation %>%
-  filter(from == 'PC') %>%
+  filter(intervention == 'NONE' & from == 'PC') %>%
   group_by(src) %>%
   summarize(yearly = mean(enpv))
 
@@ -1239,89 +1315,6 @@ comparison %>%
 
 
 
-# Interventions
-We now introduce five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
-To "err on the rigth side", we choose to use the yearly rather than the phasely method since this yield higher values for NPV and ENPV.
-We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
-The intervention can be described as a unconditional, non-dilutive prize.
-This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
-Prize size is quantitatively varied stochastically.
-
-We are logarithmically sampling prize sizes.
-This is because we assume that the absolute difference in effect will be much smaller when prize sizes are very small, as compared to when prize sizes are very large, and hence need more samples at the "bottom" to properly saturate the space.
-In the analysis we at all times "control for" prizes which means that the chosen distribution does not affect any of the conclusions beyond sample saturation.
-The table below show the intervention distribution that we are sampling from.
-
-```{r, intervention-dist, echo=FALSE}
-intervention_dist <- # Expressed in million usd
-  data.frame(target = factor(c('P1','P2','P3','P4','M1'),
-                             levels=PHASES, ordered=TRUE),
-             intervention = c('P1ER','P2ER','P3ER','P4ER','PDMER'),
-             prize_min = 1,
-             prize_max = 19.999,
-             magn_min = -1,
-             magn_max = 3)
-kable(intervention_dist, caption='Interventions (million usd)')
-```
-
-```{r, intervention-sample}
-log10_sample <- function (n, min, max, magnitude_min, magnitude_max)
-  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
-
-intervened <- phases %>%
-  # TODO: This should not be necessary. Add interventions before you perform
-  # valuation. This means you avoid the whole issue of having to value twice.
-  select(-intervention, -prizes) %>%
-  # Cartesian product merge with intervention dist
-  merge(., intervention_dist) %>%
-  # Group by subject (but not by phase) since intervention size should remain
-  # the same within the same subject. Then sample intervention prizes and
-  # normalize by converting from million usd to usd.
-  group_by(subject) %>%
-  mutate(sample = log10_sample(1, prize_min, prize_max, magn_min, magn_max) * 10^6) %>%
-  ungroup %>%
-  # Add sample to prizes column at appropriate phase
-  mutate(prizes = ifelse(phase == target, sample, 0)) %>%
-  # Remove temp columns
-  select(-sample, -target, -prize_min, -prize_max, -magn_min, -magn_max) %>%
-  # Add control group
-  rbind(., phases %>% mutate(prizes = 0, intervention = 'NONE'))
-```
-
-The histogram below depict the result of logarithmically sampling intervention prizes.
-
-```{r, prize-summary, echo=FALSE, message=FALSE}
-print(intervened %>%
-      filter(prizes > 0) %>%
-      ggplot(aes(prizes, fill=phase)) +
-      geom_histogram() +
-      facet_wrap(interaction(intervention, phase)~., ncol=3) +
-      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
-                         breaks = pretty_breaks(8)) +
-      xlab('USD (billions)') +
-      ylab(element_blank()) +
-      theme(axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            axis.text.y = element_blank()) +
-      guides(fill = FALSE))
-```
-
-We then convert the data to yearly, and restructure it so that every row without an intervention is matched with the corresponding row with an intervention for every qualitatively different intervention.
-Meaning that we duplicate ever original sample once for every phase of intervention.
-Consequently, we can no longer plot the full data set without controlling for intervention.
-
-```{r, add-prizes}
-intervened_years <- to_years(intervened)
-
-control <- filter(intervened_years, intervention == 'NONE')
-treated <- filter(intervened_years, intervention != 'NONE')
-
-comparable_years <-
-  semi_join(treated, control, by=c('src', 'subject', 'phase', 'phase_year')) %>%
-  group_by(src, subject) %>%
-  arrange(phase, phase_year) %>%
-  mutate(time_to = cumsum(time) - time)
-```
 
 # Analysis
 The question we want to explore is whether it is cheaper for the benefactor to directly or indirectly fund antibiotics R&D.
@@ -1363,6 +1356,20 @@ We refer to the expected cost of paying for the project at cost (i.e. direct fun
 | Private ENPV  | The expected (private) value of a project.         |
 | Indirect ENPV | The expected cost of issuing a prize.              |
 | Direct ENPV   | The expected cost of paying for a project at-cost. |
+
+
+THERE NEEDS TO BE AN EXPLANATORY TEXT FOR THE CODE SNIPPET BELOW.
+
+```{r, comparable-years}
+control <- filter(years, intervention == 'NONE')
+treated <- filter(years, intervention != 'NONE')
+
+comparable_years <-
+  semi_join(treated, control, by=c('src', 'subject', 'phase', 'phase_year')) %>%
+  group_by(src, subject) %>%
+  arrange(phase, phase_year) %>%
+  mutate(time_to = cumsum(time) - time)
+```
 
 We compute private, direct, and indirect ENPV like this:
 
@@ -1828,7 +1835,7 @@ We model this inefficiency as an "efficiency factor" that increases costs and ti
 If the efficiency factor, e.g. is 75% then a cost of 10 million will be transformed into a cost of 17.5 million, because 10 \* (1 + 0.75) = 17.5.
 
 ```{r, add-inefficiency}
-inefficient <- phases %>%
+inefficient <- intervened %>%
   mutate(cost = cost * (1 + inefficiency),
          time = time * (1 + inefficiency))
 inefficient_years <- to_years(inefficient)
