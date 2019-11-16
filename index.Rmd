@@ -700,7 +700,6 @@ We make the assumption that the evaluator converts every phase into a series of 
 This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
 To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
 
-Unless otherwise specified, all plots in this chapter are based on the control sample, i.e. with no interventions applied.
 
 ## Phase-based method
 We begin by assuming that all cashflows related to a phase occur immediately upon phase entry and compute Expected Value (EV), Present Value (PV), and Expected Present Value (EPV) of all phases from the perspective of all phases.
@@ -737,87 +736,6 @@ phase_based_valuation <- function(phs) {
 }
 
 phasely_valuation <- phase_based_valuation(intervened)
-```
-
-Before plotting we begin with some data wrangling.
-
-```{r, phase-based-wrangling}
-# Long
-phasely_valuation_long <- phasely_valuation %>%
-  select(src, intervention, subject, from, phase,
-         cashflow, ev, pv, epv,
-         cum, env, npv, enpv) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -phase) %>%
-  transform(metric = factor(metric, levels = c(metrics, cum_metrics)))
-
-# Final valuations
-phasely_final_valuation <- phasely_valuation %>%
-  group_by(src, intervention, subject, from) %>%
-  arrange(phase) %>%
-  summarize(cum = tail(cum, n=1),
-            epv = tail(epv, n=1),
-            npv = tail(npv, n=1),
-            enpv = tail(enpv, n=1))
-
-# Final long
-phasely_final_valuation_long <- phasely_valuation_long %>%
-  filter(metric %in% cum_metrics) %>%
-  group_by(src, intervention, subject, from, metric) %>%
-  arrange(phase) %>%
-  summarize(value = tail(value, n=1))
-```
-
-Let us then plot the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
-Note the usage of different scales across the different metrics due the vastly different values.
-
-
-```{r, phase-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE' & from == 'PC' & metric %in% cum_metrics) %>%
-  ggplot(aes(metric, value / 10^6, fill=src)) +
-  geom_boxplot() +
-  ylab('USD (millions)') +
-  xlab(element_blank()) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  facet_wrap(. ~ metric, scale='free', nrow=1) +
-  theme(legend.position = 'top')
-```
-
-Another way to look at the data is to consider how starting at different phases alter the value of the project.
-Below we combine all datasets and plot the mean value (across all datasets) of bringing the project to completion from various starting phases, using the four cumulative metrics.
-The vertical lines delimit +/- 1 standard deviation from the sample mean (i.e. ~68% of the data).
-The second plot depicts the mean valuations within each dataset.
-
-```{r, phase-based-summary2-tempppp, echo=FALSE}
-pos <- position_dodge(0.4)
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  group_by(from, metric) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(from, mu, color=metric, group=metric)) +
-  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
-  geom_line(position=pos, size=1, linetype='dotted') +
-  geom_point(position=pos, size=2) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  theme(legend.position = 'top')
-
-# TODO: Add linerange like in the plot above?
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
-  stat_summary(fun.y=mean, geom='line') +
-  stat_summary(fun.y=mean, geom='point') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  facet_wrap(. ~ metric) +
-  theme(legend.position = 'top',
-        axis.text.x = element_text(angle=90, hjust=1))
 ```
 
 
@@ -933,253 +851,13 @@ for (from in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
 }
 ```
 
-Again, we must follow this up with some data wrangling to prepare for analysis.
-
-```{r, year-based-wrangling}
-# Long
-yearly_valuation_long <- yearly_valuation %>%
-  select(src, intervention, subject, from, year,
-         cashflow, ev, pv, epv,
-         cum, env, npv, enpv) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -year) %>%
-  transform(metric = factor(metric, levels = c(metrics, cum_metrics)))
-
-# Final valuations
-yearly_final_valuation <- yearly_valuation %>%
-  group_by(src, intervention, subject, from) %>%
-  arrange(year) %>%
-  summarize(cum = tail(cum, n=1),
-            epv = tail(epv, n=1),
-            npv = tail(npv, n=1),
-            enpv = tail(enpv, n=1))
-
-# Final long
-yearly_final_valuation_long <- yearly_valuation_long %>%
-  filter(metric %in% cum_metrics) %>%
-  group_by(src, intervention, subject, from, metric) %>%
-  arrange(year) %>%
-  summarize(value = tail(value, n=1))
-```
-
-
-As with the phase-based method, let us also do some descriptive statistics.
-We begin with the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
-Again, note the usage of different scales across the different metrics due the vastly different values.
-
-```{r, year-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-# TODO: Remove x-tick label
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% cum_metrics) %>%
-  ggplot(aes(metric, value/10^6, fill=src)) +
-  geom_boxplot() +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  facet_wrap(. ~ metric, scale='free', nrow=1) +
-  theme(legend.position = 'top')
-```
-
-When we've transformed the data to year-based we've moved from an ordinal to a ratio scale.
-As such it makes sense to explore how these valuations emerge as a consequence of the yearly cashflows of a project.
-From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
-The middle line in each ribbon tracks the mean value, while the edges capture all values within 2 standard deviations of the mean (meaning 95% of the data).
-
-```{r, year-based-summary2, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-yearly_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% metrics) %>%
-  group_by(src, metric, year) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(year, mu)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
-                     label = unit_format(unit='', scale = 1e-6)) +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
-  geom_line(aes(color=src)) +
-  facet_wrap(. ~ metric, scale='free_y', ncol=2)
-```
-
-If we cumulate these values over time, we get the cumulative versions of these metrics.
-These can be thought of as the value of planning to run the project for x years, from the start.
-The x-axis consequently describes the planned "point of exit".
-From top-left to bottom right: cumulative out-of-pocket cashflows, cumulative risk-adjusted/expected value (EV), capitalized/net present value (NPV), and risk-adjusted/expected capitalized/net present value (ENPV).
-
-```{r, year-based-summary3, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-yearly_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% cum_metrics) %>%
-  group_by(src, metric, year) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(year, mu)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
-                     label = unit_format(unit='', scale = 1e-6)) +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
-  geom_line(aes(color=src)) +
-  facet_wrap(. ~ metric, scale='free_y', ncol=2)
-```
-
-Again, we can look at how different starting phases alter the value of a project.
-The first plot depicts the mean value (across datasets) of bringing the project to completion from whatever starting phase we're currently considering.
-The vertical lines delimit +/- 1 standard deviations from the sample mean (i.e. ~68% of the data).
-The second plot depicts the mean of the same valuations but for each individual dataset.
-
-```{r, year-based-summary4, echo=FALSE}
-pos <- position_dodge(0.4)
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  group_by(from, metric) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(from, mu, color=metric, group=metric)) +
-  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
-  geom_line(position=pos, size=1, linetype='dotted') +
-  geom_point(position=pos, size=2) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  theme(legend.position = 'top')
-
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
-  stat_summary(fun.y=mean, geom='line') +
-  stat_summary(fun.y=mean, geom='point') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  facet_wrap(. ~ metric) +
-  theme(legend.position = 'top',
-        axis.text.x = element_text(angle=90, hjust=1))
-```
-
-The table below summarizes the valuation metrics from the start of pre-clinical, in millions.
-
-```{r, year-based-table, echo=FALSE}
-sub <- yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from=='PC' & metric %in% cum_metrics) %>%
-  group_by(src, metric) %>%
-  summarize(mean  = mean(value) / 10^6,
-            median = median(value) / 10^6,
-            std = sd(value) / 10^6) %>%
-  arrange(metric)
-kable(sub)
-```
-
-
-## Comparing methods
-Let us compare the two methods by looking at the cumulative valuations from different starting points.
-In the first two plots we observe that the simple valuation metrics cumulative cashflows and ENV, does not significantly differ between the two methods in any of the datasets.
-In fact, the cumulative metric should yield exactly the same results in both methods as neither discounting nor probability is taken into consideration.
-When computing ENV however, we take probability into account, and as a consequence, the outcome could in theory be different, but in practice, i.e. in the plot below, we observe that the difference is insignificant.
-
-```{r, combine-methods, echo=FALSE}
-pwise <- phasely_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  mutate(method = factor('phase', levels=c('phase', 'year')))
-ywise <- yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  mutate(method = factor('year', levels=c('phase', 'year')))
-both <- bind_rows(pwise, ywise)
-```
-
-Taking discounting into consideration however, makes the two methods yield slightly different results.
-The following two plots illustrate that difference for the metrics NPV and ENPV.
-Again, in all datasets, from multiple starting phases.
-
-
-```{r, methods-comparison, echo=FALSE}
-for (curr in c('cum', 'env', 'npv', 'enpv')) {
-  p <- both %>%
-    filter(intervention == 'NONE') %>%
-    filter(metric == curr & from %in% c(DEVELOPMENT_PHASES, 'M1')) %>%
-    ungroup %>%
-    ggplot(aes(src, value / 10^6, color=method, fill=method)) +
-    geom_boxplot(alpha=0.3) +
-    facet_wrap(. ~ from, scales='free', ncol=6) +
-    ylab('USD (millions)') +
-    xlab(element_blank()) +
-    theme(axis.text.x = element_text(angle=90, hjust=1),
-          axis.text.y = element_text(angle=90),
-          legend.position = 'top') +
-    ggtitle(curr)
-  print(p)
-}
-```
-
-Evidently, there are no differences between the methods in the non-discounted valuation metrics.
-Interestingly however, the difference also seems comparatively small in the discounted metrics, but the yearly method does indeed yield slightly higher values.
-The difference between the two methods is more pronounced the earlier your venture point of valuation since the effect of discounting has more time to accumulate.
-
-Finally, let us compare the mean ENPV (starting from pre-clinical) of the Sertkaya data using both methods to the mean ENPV reported for the same indications in Table 13 of Sertkaya et. al (2014).
-Seeing that we've attempted to reflect their assumptions as closely as possible, the resulting ENPV should not be too far apart.
-
-```{r, sertkaya-enpv-paper-comparison, echo=FALSE}
-expected <-
-  data.frame(src = INDICATIONS,
-             original = c(-2.7 * 10^6,
-                          27.1 * 10^6,
-                          37.4 * 10^6,
-                          8.9  * 10^6,
-                          21.9 * 10^6,
-                          -4.5 * 10^6))
-
-actual_phasely <- phasely_final_valuation %>%
-  filter(intervention == 'NONE' & from == 'PC') %>%
-  group_by(src) %>%
-  summarize(phasely = mean(enpv))
-
-actual_yearly <- yearly_final_valuation %>%
-  filter(intervention == 'NONE' & from == 'PC') %>%
-  group_by(src) %>%
-  summarize(yearly = mean(enpv))
-
-actual <- merge(actual_yearly, actual_phasely, by='src')
-comparison <- merge(expected, actual, by='src', all.x=TRUE) %>%
-  # Convert to millions
-  mutate(original = original / 10^6,
-         phasely  = phasely / 10^6,
-         yearly   = yearly / 10^6) %>%
-  # Prettier names
-  rename('Sertkaya et. al (2014)' = original)
-
-# Print table in millions
-comparison %>%
-  mutate(yearly = round(yearly, 1),
-         phasely = round(phasely, 1)) %>%
-  kable(caption = 'Mean ENPV comparison (million USD, rounded)')
-
-# Plot comparison
-comparison %>%
-  gather(method, value, -src) %>%
-  # Control printing order
-  ggplot(aes(src, value, fill=method)) +
-  geom_bar(stat='identity', position=position_dodge()) +
-  facet_wrap(. ~ src, scale='free_x', nrow=1) +
-  ylab('Mean ENPV (million usd)') +
-  xlab(element_blank()) +
-  theme(legend.position = 'top',
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank())
-```
-
 
 # Summary statistics
-TODO: Explanatory text. This chapter will contain all summary statistics eventually.
-
 We now present some summary statistics.
 First, to sanity check that our samples seem to be properly drawn from their respective distributions.
 Then, to explore what valuations we reach using our different valuations methods and metrics.
 
-Unless otherwise specified, this chapter presents statistics **without** interventions and inefficiencies applied.
+Unless otherwise specified, this chapter presents statistics based on the "control" sample, i.e. **with no** interventions or inefficiencies applied.
 
 ## Development data
 We first plot development data.
@@ -1333,6 +1011,327 @@ print(intervened %>%
             axis.text.y = element_blank()) +
       guides(fill = FALSE))
 ```
+
+## Phase-based summary
+Let us now look at some summary statistics of using the phase-based method.
+
+```{r, phase-based-wrangling, echo=FALSE}
+# Long
+phasely_valuation_long <- phasely_valuation %>%
+  select(src, intervention, subject, from, phase,
+         cashflow, ev, pv, epv,
+         cum, env, npv, enpv) %>%
+  gather('metric', 'value', -src, -intervention, -subject, -from, -phase) %>%
+  transform(metric = factor(metric, levels = c(metrics, cum_metrics)))
+
+# Final valuations
+phasely_final_valuation <- phasely_valuation %>%
+  group_by(src, intervention, subject, from) %>%
+  arrange(phase) %>%
+  summarize(cum = tail(cum, n=1),
+            epv = tail(epv, n=1),
+            npv = tail(npv, n=1),
+            enpv = tail(enpv, n=1))
+
+# Final long
+phasely_final_valuation_long <- phasely_valuation_long %>%
+  filter(metric %in% cum_metrics) %>%
+  group_by(src, intervention, subject, from, metric) %>%
+  arrange(phase) %>%
+  summarize(value = tail(value, n=1))
+```
+
+Let us first plot the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
+Note the usage of different scales across the different metrics due the vastly different values.
+
+
+```{r, phase-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+phasely_final_valuation_long %>%
+  filter(intervention == 'NONE' & from == 'PC' & metric %in% cum_metrics) %>%
+  ggplot(aes(metric, value / 10^6, fill=src)) +
+  geom_boxplot() +
+  ylab('USD (millions)') +
+  xlab(element_blank()) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  facet_wrap(. ~ metric, scale='free', nrow=1) +
+  theme(legend.position = 'top')
+```
+
+Another way to look at the data is to consider how starting at different phases alter the value of the project.
+Below we combine all datasets and plot the mean value (across all datasets) of bringing the project to completion from various starting phases, using the four cumulative metrics.
+The vertical lines delimit +/- 1 standard deviation from the sample mean (i.e. ~68% of the data).
+The second plot depicts the mean valuations within each dataset.
+
+```{r, phase-based-summary2-tempppp, echo=FALSE}
+pos <- position_dodge(0.4)
+phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  group_by(from, metric) %>%
+  summarize(mu = mean(value),
+            std = sd(value)) %>%
+  ggplot(aes(from, mu, color=metric, group=metric)) +
+  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
+  geom_line(position=pos, size=1, linetype='dotted') +
+  geom_point(position=pos, size=2) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                     label = unit_format(unit = '', scale = 1e-9)
+                     ) +
+  xlab(element_blank()) + ylab('USD (billions)') +
+  theme(legend.position = 'top')
+
+# TODO: Add linerange like in the plot above?
+phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
+  stat_summary(fun.y=mean, geom='line') +
+  stat_summary(fun.y=mean, geom='point') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                     label = unit_format(unit = '', scale = 1e-9)
+                     ) +
+  xlab(element_blank()) + ylab('USD (billions)') +
+  facet_wrap(. ~ metric) +
+  theme(legend.position = 'top',
+        axis.text.x = element_text(angle=90, hjust=1))
+```
+
+## Year-based summary
+Let us now look at some summary statistics of using the year-based method.
+
+```{r, year-based-wrangling, echo=FALSE}
+# Long
+yearly_valuation_long <- yearly_valuation %>%
+  select(src, intervention, subject, from, year,
+         cashflow, ev, pv, epv,
+         cum, env, npv, enpv) %>%
+  gather('metric', 'value', -src, -intervention, -subject, -from, -year) %>%
+  transform(metric = factor(metric, levels = c(metrics, cum_metrics)))
+
+# Final valuations
+yearly_final_valuation <- yearly_valuation %>%
+  group_by(src, intervention, subject, from) %>%
+  arrange(year) %>%
+  summarize(cum = tail(cum, n=1),
+            epv = tail(epv, n=1),
+            npv = tail(npv, n=1),
+            enpv = tail(enpv, n=1))
+
+# Final long
+yearly_final_valuation_long <- yearly_valuation_long %>%
+  filter(metric %in% cum_metrics) %>%
+  group_by(src, intervention, subject, from, metric) %>%
+  arrange(year) %>%
+  summarize(value = tail(value, n=1))
+```
+
+We begin with the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
+Again, note the usage of different scales across the different metrics due the vastly different values.
+
+```{r, year-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# TODO: Remove x-tick label
+yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  filter(from == 'PC' & metric %in% cum_metrics) %>%
+  ggplot(aes(metric, value/10^6, fill=src)) +
+  geom_boxplot() +
+  xlab(element_blank()) +
+  ylab('USD (millions)') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
+  facet_wrap(. ~ metric, scale='free', nrow=1) +
+  theme(legend.position = 'top')
+```
+
+When we've transformed the data to year-based we've moved from an ordinal to a ratio scale.
+As such it makes sense to explore how these valuations emerge as a consequence of the yearly cashflows of a project.
+From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
+The middle line in each ribbon tracks the mean value, while the edges capture all values within 2 standard deviations of the mean (meaning 95% of the data).
+
+```{r, year-based-summary2, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+yearly_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  filter(from == 'PC' & metric %in% metrics) %>%
+  group_by(src, metric, year) %>%
+  summarize(mu = mean(value),
+            std = sd(value)) %>%
+  ggplot(aes(year, mu)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
+                     label = unit_format(unit='', scale = 1e-6)) +
+  xlab(element_blank()) +
+  ylab('USD (millions)') +
+  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
+  geom_line(aes(color=src)) +
+  facet_wrap(. ~ metric, scale='free_y', ncol=2)
+```
+
+If we cumulate these values over time, we get the cumulative versions of these metrics.
+These can be thought of as the value of planning to run the project for x years, from the start.
+The x-axis consequently describes the planned "point of exit".
+From top-left to bottom right: cumulative out-of-pocket cashflows, cumulative risk-adjusted/expected value (EV), capitalized/net present value (NPV), and risk-adjusted/expected capitalized/net present value (ENPV).
+
+```{r, year-based-summary3, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+yearly_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  filter(from == 'PC' & metric %in% cum_metrics) %>%
+  group_by(src, metric, year) %>%
+  summarize(mu = mean(value),
+            std = sd(value)) %>%
+  ggplot(aes(year, mu)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
+                     label = unit_format(unit='', scale = 1e-6)) +
+  xlab(element_blank()) +
+  ylab('USD (millions)') +
+  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
+  geom_line(aes(color=src)) +
+  facet_wrap(. ~ metric, scale='free_y', ncol=2)
+```
+
+Again, we can look at how different starting phases alter the value of a project.
+The first plot depicts the mean value (across datasets) of bringing the project to completion from whatever starting phase we're currently considering.
+The vertical lines delimit +/- 1 standard deviations from the sample mean (i.e. ~68% of the data).
+The second plot depicts the mean of the same valuations but for each individual dataset.
+
+```{r, year-based-summary4, echo=FALSE}
+pos <- position_dodge(0.4)
+yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  group_by(from, metric) %>%
+  summarize(mu = mean(value),
+            std = sd(value)) %>%
+  ggplot(aes(from, mu, color=metric, group=metric)) +
+  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
+  geom_line(position=pos, size=1, linetype='dotted') +
+  geom_point(position=pos, size=2) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                     label = unit_format(unit = '', scale = 1e-9)
+                     ) +
+  xlab(element_blank()) + ylab('USD (billions)') +
+  theme(legend.position = 'top')
+
+yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
+  stat_summary(fun.y=mean, geom='line') +
+  stat_summary(fun.y=mean, geom='point') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                     label = unit_format(unit = '', scale = 1e-9)
+                     ) +
+  xlab(element_blank()) + ylab('USD (billions)') +
+  facet_wrap(. ~ metric) +
+  theme(legend.position = 'top',
+        axis.text.x = element_text(angle=90, hjust=1))
+```
+
+The table below summarizes the valuation metrics from the start of pre-clinical, in millions.
+
+```{r, year-based-table, echo=FALSE}
+sub <- yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  filter(from=='PC' & metric %in% cum_metrics) %>%
+  group_by(src, metric) %>%
+  summarize(mean  = mean(value) / 10^6,
+            median = median(value) / 10^6,
+            std = sd(value) / 10^6) %>%
+  arrange(metric)
+kable(sub)
+```
+
+
+## Comparing methods
+Let us now compare the two methods (phase-based and year-based) by looking at the cumulative valuations from different starting points.
+In the first two plots we observe that the simple valuation metrics cumulative cashflows and ENV, does not significantly differ between the two methods in any of the datasets.
+In fact, the cumulative metric should yield exactly the same results in both methods as neither discounting nor probability is taken into consideration.
+When computing ENV however, we take probability into account, and as a consequence, the outcome could in theory be different, but in practice, i.e. in the plot below, we observe that the difference is insignificant.
+
+```{r, combine-methods, echo=FALSE}
+pwise <- phasely_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  mutate(method = factor('phase', levels=c('phase', 'year')))
+ywise <- yearly_final_valuation_long %>%
+  filter(intervention == 'NONE') %>%
+  mutate(method = factor('year', levels=c('phase', 'year')))
+both <- bind_rows(pwise, ywise)
+```
+
+Taking discounting into consideration however, makes the two methods yield slightly different results.
+The following two plots illustrate that difference for the metrics NPV and ENPV.
+Again, in all datasets, from multiple starting phases.
+
+
+```{r, methods-comparison, echo=FALSE}
+for (curr in c('cum', 'env', 'npv', 'enpv')) {
+  p <- both %>%
+    filter(intervention == 'NONE') %>%
+    filter(metric == curr & from %in% c(DEVELOPMENT_PHASES, 'M1')) %>%
+    ungroup %>%
+    ggplot(aes(src, value / 10^6, color=method, fill=method)) +
+    geom_boxplot(alpha=0.3) +
+    facet_wrap(. ~ from, scales='free', ncol=6) +
+    ylab('USD (millions)') +
+    xlab(element_blank()) +
+    theme(axis.text.x = element_text(angle=90, hjust=1),
+          axis.text.y = element_text(angle=90),
+          legend.position = 'top') +
+    ggtitle(curr)
+  print(p)
+}
+```
+
+Evidently, there are no differences between the methods in the non-discounted valuation metrics.
+Interestingly however, the difference also seems comparatively small in the discounted metrics, but the yearly method does indeed yield slightly higher values.
+The difference between the two methods is more pronounced the earlier your venture point of valuation since the effect of discounting has more time to accumulate.
+
+Finally, let us compare the mean ENPV (starting from pre-clinical) of the Sertkaya data using both methods to the mean ENPV reported for the same indications in Table 13 of Sertkaya et. al (2014).
+Seeing that we've attempted to reflect their assumptions as closely as possible, the resulting ENPV should not be too far apart.
+
+```{r, sertkaya-enpv-paper-comparison, echo=FALSE}
+expected <-
+  data.frame(src = INDICATIONS,
+             original = c(-2.7 * 10^6,
+                          27.1 * 10^6,
+                          37.4 * 10^6,
+                          8.9  * 10^6,
+                          21.9 * 10^6,
+                          -4.5 * 10^6))
+
+actual_phasely <- phasely_final_valuation %>%
+  filter(intervention == 'NONE' & from == 'PC') %>%
+  group_by(src) %>%
+  summarize(phasely = mean(enpv))
+
+actual_yearly <- yearly_final_valuation %>%
+  filter(intervention == 'NONE' & from == 'PC') %>%
+  group_by(src) %>%
+  summarize(yearly = mean(enpv))
+
+actual <- merge(actual_yearly, actual_phasely, by='src')
+comparison <- merge(expected, actual, by='src', all.x=TRUE) %>%
+  # Convert to millions
+  mutate(original = original / 10^6,
+         phasely  = phasely / 10^6,
+         yearly   = yearly / 10^6) %>%
+  # Prettier names
+  rename('Sertkaya et. al (2014)' = original)
+
+# Print table in millions
+comparison %>%
+  mutate(yearly = round(yearly, 1),
+         phasely = round(phasely, 1)) %>%
+  kable(caption = 'Mean ENPV comparison (million USD, rounded)')
+
+# Plot comparison
+comparison %>%
+  gather(method, value, -src) %>%
+  # Control printing order
+  ggplot(aes(src, value, fill=method)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  facet_wrap(. ~ src, scale='free_x', nrow=1) +
+  ylab('Mean ENPV (million usd)') +
+  xlab(element_blank()) +
+  theme(legend.position = 'top',
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
+
+
 
 
 # Analysis
