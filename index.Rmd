@@ -691,30 +691,23 @@ respectively, where $t$ is the time to the phase, and $T$ is the times to all ti
 TODO: Verify that the probability portion of ENPV is actually computed accordingly!
 </div>
 
+Programatically, we use the function below to compute the valuation metrics from all phases to all phases, given some input dataset.
 
-# Valuation methods
-As phase durations are long, the time value of money not only greatly reduces the attractiveness of revenues, but also dampen the pain of costs.
-To take the time value of money into account we must make an assumption about how a real world evaluation of a project periodizes future costs, revenues and probabilities.
-In other words, how a hypothetical evaluator chooses to transform a sequence of discrete phases into a sequence of discrete and uncertain cashflows.
-We make the assumption that the evaluator converts every phase into a series of years in order to properly discount the cashflow of the given phase.
-This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
-To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
-
-
-## Phase-based method
-We begin by assuming that all cashflows related to a phase occur immediately upon phase entry and compute Expected Value (EV), Present Value (PV), and Expected Present Value (EPV) of all phases from the perspective of all phases.
-We then cumulate these metrics in order to, respectively, compute cumulative EV, Net Present Value (NPV), and Expected Net Present Value (ENPV) from any phase to any phase.
-
-```{r, phase-based-valuation}
-# TODO: Use the same function for all valuations.
-# Should not matter whether it's phasely or yearly.
-phase_based_valuation <- function(phs) {
+```{r, valuation-function}
+# NOTE: The column 'order' is required so that the function knows how to order
+# rows of a given subject.
+valuation <- function(df) {
   result <- tibble()
+  # Compute valuations from all development phases and first market year
   for (frm in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
-    rows <- phs %>%
+    inner <- df %>%
+      # Remove phases before starting phase
       filter(phase >= frm) %>%
+      # Valuation is subject specific
       group_by(src, intervention, subject) %>%
-      arrange(phase) %>%
+      # Ensure order is based on order column
+      arrange(order) %>%
+      # Valuation
       mutate(from = factor(frm, levels=PHASES, ordered=TRUE),
              time_to = cumsum(time) - time,
              cum_prob = cumprod(prob),
@@ -730,12 +723,33 @@ phase_based_valuation <- function(phs) {
              npv = cumsum(pv),
              enpv = cumsum(epv),
       )
-      result <- bind_rows(result, rows)
+      # Add to resulting data frame
+      result <- bind_rows(result, inner)
   }
   result
 }
+```
 
-phasely_valuation <- phase_based_valuation(intervened)
+
+# Valuation methods
+As phase durations are long, the time value of money not only greatly reduces the attractiveness of revenues, but also dampen the pain of costs.
+To take the time value of money into account we must make an assumption about how a real world evaluation of a project periodizes future costs, revenues and probabilities.
+In other words, how a hypothetical evaluator chooses to transform a sequence of discrete phases into a sequence of discrete and uncertain cashflows.
+We make the assumption that the evaluator converts every phase into a series of years in order to properly discount the cashflow of the given phase.
+This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
+To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
+
+
+## Phase-based method
+The phase-based method is very straight forward since it assumes that all cashflows related to a phase occur immediately upon phase entry.
+We can therefore apply our valuation function to the original dataset directly.
+
+```{r, phase-based-valuation}
+phasely_valuation <-
+  # Add order column before passing to valuation function
+  valuation(intervened %>% mutate(order = phase)) %>%
+  # Remove temp order column
+  select(-order)
 ```
 
 
@@ -826,30 +840,18 @@ While we would divide P1 into three equidistant (years) points (years), that sta
 We can now compute the same valuation metrics we computed for the phase-based method but this time for the year-based method:
 
 ```{r, year-based-valuation}
-yearly_valuation <- tibble()
-for (from in c(DEVELOPMENT_PHASES, head(MARKET_PHASES, n=1))) {
-  pyfp <- years %>%
-    filter(phase >= from) %>%
-    group_by(src, subject, intervention) %>%
-    arrange(phase, phase_year) %>%
-    mutate(from     = factor(from, levels=PHASES, ordered=TRUE),
-           time_to  = cumsum(time) - time,
-           year     = round(time_to), # TODO: Should perhaps just be round?
-           cum_prob = cumprod(prob),
-           prob_to  = cum_prob / prob,
-           # cashflows
-           cashflow = sales + prizes - cost,
-           ev       = cashflow * prob_to,
-           pv       = cashflow / ((1 + discount_rate_priv) ^ time_to),
-           epv      = pv * prob_to,
-           # cumulatives
-           cum      = cumsum(cashflow),
-           env      = cumsum(ev),
-           npv      = cumsum(pv),
-           enpv     = cumsum(epv))
-    yearly_valuation <- bind_rows(yearly_valuation, pyfp)
-}
+# Compute absolute time to phases
+yearly_valuation <-
+  valuation(years %>%
+            group_by(src, intervention, subject) %>%
+            arrange(phase, phase_year) %>%
+            mutate(order = cumsum(time) - time)) %>%
+  # Compute year column
+  mutate(year = round(time_to)) %>%
+  # Remove temp order column
+  select(-order)
 ```
+
 
 
 # Summary statistics
