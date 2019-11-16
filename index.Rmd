@@ -266,6 +266,83 @@ sertkaya2014_additional_dist %>%
   kable(caption='sertkaya2014_additional_dist (million usd and rounded percentages)')
 ```
 
+
+
+## DRIVE-AB distribution
+The following is an approximation of the data used in DRIVE-AB final report (2018).
+Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
+
+In the table below, time is reported in months, cost in million USD, and probability in percentages.
+
+```{r, driveab-dist, echo=FALSE}
+driveab2018_phase_dist <-
+  data.frame(phase = DEVELOPMENT_PHASES,
+             time_min = c(52, 9, 9, 10, 6),
+             time_mid = c(66, 10.5, 13.33, 21.8, 9),
+             time_max = c(72, 21.6, 30, 47, 12.5),
+             # TODO: Cost of P2 is incorrectly reported in DRIVE-AB Final Report!
+             # We're using the numbers from Okhravi et al. (2018)
+             cost_min = c(14.25, 13.1,  12.95,  27.99, 55.5),
+             cost_mid = c(21.1,  24,    24.55,  62.6,  88.35),
+             cost_max = c(29,    37.96, 46.36,  168.4, 127.91),
+             prob_min = c(17.5, 25, 34, 31.4, 83),
+             prob_mid = c(35.2, 33, 50, 67, 85),
+             prob_max = c(69, 83.7, 74, 78.6, 99))
+
+kable(driveab2018_phase_dist, caption = 'driveab2018_phase_dist')
+```
+
+
+```{r, driveab-additional-params, echo=FALSE}
+driveab2018_tot_sales_min = 0
+driveab2018_tot_sales_mid = 2559.5
+driveab2018_tot_sales_max = 4336
+driveab2018_market_years = 10
+driveab2018_discount_rate_priv_min = 0.05 * 100
+driveab2018_discount_rate_priv_max = 0.3 * 100
+```
+
+In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of `r driveab2018_market_years` years.
+Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
+Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
+The first year will thus be non-zero if the market revenues of the project is non-zero.
+
+```{r, print-driveab-additional-params, echo=FALSE}
+data.frame(parameter = 'Total sales (million usd)',
+           min = driveab2018_tot_sales_min,
+           mid = driveab2018_tot_sales_mid,
+           max = driveab2018_tot_sales_max) %>% kable
+
+data.frame(parameter = 'Private developer discount rate (%)',
+           min = driveab2018_discount_rate_priv_min,
+           max = driveab2018_discount_rate_priv_max) %>% kable
+```
+
+## New assumptions
+To perform our analysis (comparing the cost of direct and indirect funding, as well as alternative payout phases for indirect funding) we require two additional parameters.
+First, a "public" or "social" discount rate that is representative of the cost of capital of the benefactor, i.e. the body that pays for the intervention with no expectation of monetary return.
+Second, an inefficiency parameter that will be used to measure the fact that many argue that agents with no expectation of monetary returns (e.g. states) are less efficient.
+We uniformly distribute these parameters as per the table below.
+
+```{r, additional-dist, echo=FALSE}
+public_discount_rate_min <- 0.035
+public_discount_rate_max <- 0.045
+
+public_inefficiency_min <- 0
+public_inefficiency_max <- 3
+
+data.frame(parameter = c('Public discount rate (%)',
+                         'Public inefficiency (multiplier)'),
+           min = c(public_discount_rate_min * 100,
+                   public_inefficiency_min),
+           max = c(public_discount_rate_max * 100,
+                   public_inefficiency_max)) %>% kable
+```
+
+
+# Sampling
+In this chapter, we sample the distributions outlined in the last chapter.
+
 ## Sertkaya sample
 We first sample development data from the Sertkaya distributions.
 
@@ -392,58 +469,6 @@ sertkaya2014 <- sertkaya2014 %>%
   ungroup()
 ```
 
-
-## DRIVE-AB distribution
-The following is an approximation of the data used in DRIVE-AB final report (2018).
-Some deviations (reported below) have been made as some of the DRIVE-AB assumptions are not compatible with our assumptions.
-
-In the table below, time is reported in months, cost in million USD, and probability in percentages.
-
-```{r, driveab-dist, echo=FALSE}
-driveab2018_phase_dist <-
-  data.frame(phase = DEVELOPMENT_PHASES,
-             time_min = c(52, 9, 9, 10, 6),
-             time_mid = c(66, 10.5, 13.33, 21.8, 9),
-             time_max = c(72, 21.6, 30, 47, 12.5),
-             # TODO: Cost of P2 is incorrectly reported in DRIVE-AB Final Report!
-             # We're using the numbers from Okhravi et al. (2018)
-             cost_min = c(14.25, 13.1,  12.95,  27.99, 55.5),
-             cost_mid = c(21.1,  24,    24.55,  62.6,  88.35),
-             cost_max = c(29,    37.96, 46.36,  168.4, 127.91),
-             prob_min = c(17.5, 25, 34, 31.4, 83),
-             prob_mid = c(35.2, 33, 50, 67, 85),
-             prob_max = c(69, 83.7, 74, 78.6, 99))
-
-kable(driveab2018_phase_dist, caption = 'driveab2018_phase_dist')
-```
-
-
-```{r, driveab-additional-params, echo=FALSE}
-driveab2018_tot_sales_min = 0
-driveab2018_tot_sales_mid = 2559.5
-driveab2018_tot_sales_max = 4336
-driveab2018_market_years = 10
-driveab2018_discount_rate_priv_min = 0.05 * 100
-driveab2018_discount_rate_priv_max = 0.3 * 100
-```
-
-In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of `r driveab2018_market_years` years.
-Patent expiry is assumed to occur at this point and we assume that all revenues drop to 0 beyond this point.
-Specifically, we assume that the revenues of year 0 is 0 and then linearly increase until the area under the curve is equal to the total global net sales.
-The first year will thus be non-zero if the market revenues of the project is non-zero.
-
-```{r, print-driveab-additional-params, echo=FALSE}
-data.frame(parameter = 'Total sales (million usd)',
-           min = driveab2018_tot_sales_min,
-           mid = driveab2018_tot_sales_mid,
-           max = driveab2018_tot_sales_max) %>% kable
-
-data.frame(parameter = 'Private developer discount rate (%)',
-           min = driveab2018_discount_rate_priv_min,
-           max = driveab2018_discount_rate_priv_max) %>% kable
-```
-
-
 ## DRIVE-AB sample
 
 We first sample development data from the DRIVE-AB distribution.
@@ -518,7 +543,10 @@ driveab2018 <- driveab2018 %>%
 ```
 
 
-## New assumptions
+
+
+## New assumptions sample
+TODO: ADD MORE EXPLANATORY TEXT HERE.
 Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
 
 ```{r, combine}
@@ -537,11 +565,6 @@ metrics <- c('cashflow', 'ev', 'pv', 'epv')
 cum_metrics <- c('cum', 'env', 'npv', 'enpv')
 ```
 
-Let us add a "public" or "social" discount rate.
-Meaning the cost of capital for the benefactor, i.e. for the body that pays the intervention with no expectation of monetary return.
-This parameter is used in the analysis, where its raison d'etre is also further explained.
-
-We assume that the benefactor is the public sector and use a uniformly distributed discount rate.
 Public discount rate varies across subjects but not within.
 
 In the analysis we will also explore the effect of various levels of public sector inefficiency.
@@ -550,12 +573,6 @@ In most of the calculations, the inefficiency parameter is ignored, and when use
 As such, we can explore a wide range of inefficiencies.
 
 ```{r, sample-discount-rates-and-inefficiency, dependson=-1}
-public_discount_rate_min = 0.035
-public_discount_rate_max = 0.045
-
-public_inefficiency_min <- 0
-public_inefficiency_max <- 3
-
 subjects <- unique(phases$subject)
 agents <- data.frame(
   subject = subjects,
@@ -563,140 +580,6 @@ agents <- data.frame(
   discount_rate_publ = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
 
 phases <- merge(phases, agents, by='subject', all.x=TRUE)
-```
-
-
-## Summary statistics
-We now present some summary statistics to sanity check that our samples seem to be properly drawn from their respective distributions.
-We first plot development data.
-
-```{r, summary-violins, echo=FALSE, warning=FALSE, message=FALSE}
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, cost/10^6, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Cost (million USD)')
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, time, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Time (months)')
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, prob*100, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Probability of success (%)')
-```
-
-Below we plot the sampled sales data.
-
-```{r, summary-sales, echo=FALSE}
-phases %>%
-  filter(phase %in% MARKET_PHASES) %>%
-  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Sales (million USD)')
-
-# TODO: Replace this plot with lines of max/min or similar
-phases %>%
-  filter(phase %in% MARKET_PHASES) %>%
-  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
-  geom_violin() +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Sales (million USD)')
-
-phases %>%
-  group_by(src, subject) %>%
-  summarize(tot_sales = sum(sales)) %>%
-  ggplot(aes(src, tot_sales/10^6, fill=src)) +
-  geom_violin() +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Total sales (million USD)')
-```
-
-Finally, we plot the discount rate data.
-
-```{r, summary-discount-rates, echo=FALSE}
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, discount_rate_priv*100, color=src, fill=src)) +
-  geom_violin() +
-  ylab('Discount rate (%)') +
-  xlab('Phase') +
-  theme(legend.position = 'top')
-```
-
-Interestingly, some parameters are quite dispersly distributed between phases.
-Below, we plot the mean percentage of a given property occuring in a given phase for all phases.
-
-```{r, summary-phase-distribution-means, echo=FALSE, warning=FALSE, message=FALSE}
-# Transform: phase properties to long from wide
-phase_props <- phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  select(src, subject, phase, cost, time, prob) %>%
-  gather(key='prop', value='value', -src, -subject, -phase) %>%
-  group_by(src, subject, prop) %>%
-  mutate(total = sum(value),
-         ratio = value / total) # NOTE: will cause NaN if 0/0
-
-phase_props %>%
-  group_by(src, phase, prop) %>%
-  summarise(ratio = mean(ratio)) %>%
-  filter(is.finite(ratio)) %>%
-  ggplot(aes(src, ratio * 100)) +
-  geom_bar(stat='identity', aes(fill=phase), position='stack') +
-  labs(fill='') +
-  facet_wrap(. ~ prop) +
-  theme(axis.text.x = element_text(angle=90, hjust=1))
-
-phase_props %>%
-  group_by(src, phase, prop) %>%
-  summarise(ratio = mean(ratio)) %>%
-  filter(is.finite(ratio)) %>%
-  ggplot(aes(phase, ratio * 100)) +
-  geom_bar(stat='identity', aes(fill=src), position='dodge') +
-  labs(fill='') +
-  facet_wrap(. ~ prop) +
-  theme(axis.text.x = element_text(angle=90, hjust=1),
-        legend.position = 'top')
 ```
 
 
@@ -1309,6 +1192,143 @@ comparison %>%
   theme(legend.position = 'top',
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())
+```
+
+
+# Summary statistics
+TODO: Explanatory text. This chapter will contain all summary statistics eventually.
+
+## Input data
+We now present some summary statistics to sanity check that our samples seem to be properly drawn from their respective distributions.
+We first plot development data.
+
+```{r, summary-violins, echo=FALSE, warning=FALSE, message=FALSE}
+phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  ggplot(aes(phase, cost/10^6, color=src, fill=src)) +
+  geom_violin() +
+  facet_wrap(. ~ phase, scale='free') +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Cost (million USD)')
+phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  ggplot(aes(phase, time, color=src, fill=src)) +
+  geom_violin() +
+  facet_wrap(. ~ phase, scale='free') +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Time (months)')
+phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  ggplot(aes(phase, prob*100, color=src, fill=src)) +
+  geom_violin() +
+  facet_wrap(. ~ phase, scale='free') +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Probability of success (%)')
+```
+
+Below we plot the sampled sales data.
+
+```{r, summary-sales, echo=FALSE}
+phases %>%
+  filter(phase %in% MARKET_PHASES) %>%
+  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
+  geom_violin() +
+  facet_wrap(. ~ phase, scale='free') +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Sales (million USD)')
+
+# TODO: Replace this plot with lines of max/min or similar
+phases %>%
+  filter(phase %in% MARKET_PHASES) %>%
+  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
+  geom_violin() +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Sales (million USD)')
+
+phases %>%
+  group_by(src, subject) %>%
+  summarize(tot_sales = sum(sales)) %>%
+  ggplot(aes(src, tot_sales/10^6, fill=src)) +
+  geom_violin() +
+  theme(legend.position='top',
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.x=element_blank()) +
+  ylab('Total sales (million USD)')
+```
+
+Finally, we plot the discount rate data.
+
+```{r, summary-discount-rates, echo=FALSE}
+phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  ggplot(aes(phase, discount_rate_priv*100, color=src, fill=src)) +
+  geom_violin() +
+  ylab('Discount rate (%)') +
+  xlab('Phase') +
+  theme(legend.position = 'top')
+```
+
+Interestingly, some parameters are quite dispersly distributed between phases.
+Below, we plot the mean percentage of a given property occuring in a given phase for all phases.
+
+```{r, summary-phase-distribution-means, echo=FALSE, warning=FALSE, message=FALSE}
+# Transform: phase properties to long from wide
+phase_props <- phases %>%
+  filter(phase %in% DEVELOPMENT_PHASES) %>%
+  select(src, subject, phase, cost, time, prob) %>%
+  gather(key='prop', value='value', -src, -subject, -phase) %>%
+  group_by(src, subject, prop) %>%
+  mutate(total = sum(value),
+         ratio = value / total) # NOTE: will cause NaN if 0/0
+
+phase_props %>%
+  group_by(src, phase, prop) %>%
+  summarise(ratio = mean(ratio)) %>%
+  filter(is.finite(ratio)) %>%
+  ggplot(aes(src, ratio * 100)) +
+  geom_bar(stat='identity', aes(fill=phase), position='stack') +
+  labs(fill='') +
+  facet_wrap(. ~ prop) +
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+phase_props %>%
+  group_by(src, phase, prop) %>%
+  summarise(ratio = mean(ratio)) %>%
+  filter(is.finite(ratio)) %>%
+  ggplot(aes(phase, ratio * 100)) +
+  geom_bar(stat='identity', aes(fill=src), position='dodge') +
+  labs(fill='') +
+  facet_wrap(. ~ prop) +
+  theme(axis.text.x = element_text(angle=90, hjust=1),
+        legend.position = 'top')
 ```
 
 
