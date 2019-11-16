@@ -3,7 +3,12 @@ title: Time for public pharma?
 subtitle: Supplementary material
 author: Christopher Okhravi
 date: 2019
-output: bookdown::gitbook
+output:
+  bookdown::gitbook:
+    split_by: section
+    config:
+      toc:
+        collapse: subsubsection
 ---
 
 
