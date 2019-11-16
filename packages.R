@@ -9,6 +9,7 @@ install.packages('triangle')
 install.packages('ggpubr')
 install.packages('remotes')
 remotes::install_github('rstudio/rmarkdown')
+install.packages('bookdown')
 
 install.packages('bindrcpp')
 # Solves:

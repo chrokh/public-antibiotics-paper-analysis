@@ -4,17 +4,11 @@ subtitle: Supplementary material
 author: Christopher Okhravi
 date: 2019
 output:
-  html_document:
-    number_sections: true
-    toc: true
-    toc_float:
-      collapsed: false
-    theme: default
-    highlight: haddock
+  bookdown::gitbook
 ---
 
 
-# Introduction
+# Preface
 This document contains the full analysis that underpins the paper paper "Time for public pharma?".
 This is a monte carlo simulation that explores direct versus indirect funding of antibiotics research and development (R&D).
 Direct funding is here used to mean that a benefactor pays for antibiotics R&D at cost.
@@ -23,13 +17,13 @@ This analysis estimates which of the two, ceteris paribus, is cheaper for the be
 
 ## How to compile this document
 If you're reading this in an html format then the document is already compiled.
-You can compile the Rmd file like this:
+You can compile the Rmd file(s) like this:
 
 ```bash
-Rscript -e "library(rmarkdown); render('index.Rmd')"
+Rscript -e "bookdown::render_book('index.html')"
 ```
 
-Note: While most of the code that is used to perform the analysis is included in the rendered (i.e. output) document, some is not.
+Note: While some of the code that is used to perform the analysis is included in the rendered (i.e. output) document, some is not.
 If you need further details, please consult the source code used to generate the output document.
 
 
