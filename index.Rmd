@@ -3,19 +3,18 @@ title: Time for public pharma?
 subtitle: Supplementary material
 author: Christopher Okhravi
 date: 2019
-output:
-  bookdown::gitbook
+output: bookdown::gitbook
 ---
 
 
-# Preface
+# Preface {-}
 This document contains the full analysis that underpins the paper paper "Time for public pharma?".
 This is a monte carlo simulation that explores direct versus indirect funding of antibiotics research and development (R&D).
 Direct funding is here used to mean that a benefactor pays for antibiotics R&D at cost.
 Indirect funding is here used to mean that a benefactor issues non-dilutive prizes to whoever completes a particular phase, with the intent of incentivizing private developers to undertake said and prior phases.
 This analysis estimates which of the two, ceteris paribus, is cheaper for the benefactor.
 
-## How to compile this document
+## How to compile this document {-}
 If you're reading this in an html format then the document is already compiled.
 You can compile the Rmd file(s) like this:
 
