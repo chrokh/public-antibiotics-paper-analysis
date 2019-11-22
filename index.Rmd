@@ -38,7 +38,7 @@ In other words, `N` is the number of random samples that we'll draw from a stoch
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 
 ```{r, set-n}
-N = 100
+N = 20
 ```
 
 ```{r, basics, include=FALSE}
@@ -749,10 +749,13 @@ valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
     # Ensure order is based on order column
     arrange(order) %>%
     # Valuation
-    mutate(tot_prizes = sum(prizes),
+    mutate(# subject info
+           dev_prizes = sum(prizes), # total prizes available
+           dev_time = sum(ifelse(phase < 'M1', time, 0)), # time to market
+           dev_prob = prod(ifelse(phase < 'M1', prob, 1)), # prob to market
+           # helpers
            time_to = cumsum(time) - time,
-           cum_prob = cumprod(prob),
-           prob_to = cum_prob / prob,
+           prob_to = cumprod(prob) / prob,
            # cashflows
            cashflow = sales + prizes - cost,
            ev = cashflow * prob_to,
@@ -1060,16 +1063,16 @@ Let us now look at some summary statistics of using the phase-based method.
 ```{r, phase-based-wrangling, echo=FALSE}
 # Long
 phasely_valuation_long <- phasely_valuation %>%
-  select(src, intervention, subject, from, phase, tot_prizes,
+  select(src, intervention, subject, from, phase, dev_prizes,
          cashflow, ev, pv, epv,
          cum, env, npv, enpv,
          enpv_dir, enpv_ind) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -phase, -tot_prizes) %>%
+  gather('metric', 'value', -src, -intervention, -subject, -from, -phase, -dev_prizes) %>%
   transform(metric = factor(metric, levels = c(metrics, cum_metrics, add_metrics)))
 
 # Final valuations
 phasely_final_valuation <- phasely_valuation %>%
-  group_by(src, intervention, subject, from, tot_prizes) %>%
+  group_by(src, intervention, subject, from, dev_prizes) %>%
   arrange(phase) %>%
   summarize(cum = tail(cum, n=1),
             epv = tail(epv, n=1),
@@ -1082,7 +1085,7 @@ phasely_final_valuation <- phasely_valuation %>%
 # Final long
 phasely_final_valuation_long <- phasely_valuation_long %>%
   filter(metric %in% c(cum_metrics, add_metrics)) %>%
-  group_by(src, intervention, subject, from, metric, tot_prizes) %>%
+  group_by(src, intervention, subject, from, metric, dev_prizes) %>%
   arrange(phase) %>%
   summarize(value = tail(value, n=1)) %>%
   ungroup
@@ -1147,31 +1150,29 @@ Let us now look at some summary statistics of using the year-based method.
 ```{r, year-based-wrangling, echo=FALSE}
 # Long
 yearly_valuation_long <- yearly_valuation %>%
-  select(src, intervention, subject, from, year, tot_prizes,
+  select(src, intervention, subject, from, year, dev_prizes,
          cashflow, ev, pv, epv,
          cum, env, npv, enpv,
          enpv_dir, enpv_ind) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -year, -tot_prizes) %>%
+  gather('metric', 'value', -src, -intervention, -subject, -from, -year, -dev_prizes) %>%
   transform(metric = factor(metric, levels = c(metrics, cum_metrics, add_metrics)))
 
 # Final valuations
 yearly_final_valuation <- yearly_valuation %>%
-  group_by(src, intervention, subject, from, tot_prizes) %>%
+  group_by(src, intervention, subject, from, dev_prizes, dev_time, dev_prob) %>%
   arrange(year) %>%
   summarize(cum = tail(cum, n=1),
             env = tail(env, n=1),
             npv = tail(npv, n=1),
             enpv = tail(enpv, n=1),
             enpv_dir = tail(enpv_dir, n=1),
-            enpv_ind = tail(enpv_ind, n=1),
-            time_to = tail(time_to, n=1),
-            prob_to = tail(prob_to, n=1)) %>%
+            enpv_ind = tail(enpv_ind, n=1)) %>%
   ungroup
 
 # Final long
 yearly_final_valuation_long <- yearly_valuation_long %>%
   filter(metric %in% c(cum_metrics, add_metrics)) %>%
-  group_by(src, intervention, subject, from, metric, tot_prizes) %>%
+  group_by(src, intervention, subject, from, metric, dev_prizes) %>%
   arrange(year) %>%
   summarize(value = tail(value, n=1)) %>%
   ungroup
@@ -1396,13 +1397,13 @@ Then we remove "duplicated" rows, which appear since every intervention (e.g. P1
 finals <- yearly_final_valuation %>%
   # Only consider valuations from first phase
   filter(from == 'PC') %>%
-  # Only keep identifying and valuation columns (+ prob_to, time_to)
-  select(src, intervention, subject, intervention, tot_prizes,
-         cum, env, npv, enpv, enpv_ind, enpv_dir, prob_to, time_to) %>%
+  # Only keep identifying, characteristics, and valuation columns
+  select(src, intervention, subject, dev_prizes, dev_prob, dev_time,
+         cum, env, npv, enpv, enpv_ind, enpv_dir) %>%
   # Make cartesian product to allow comparing valuations between interventions
   # within subject. NOTE: Merging by more cols than just subject to avoid
   # duplicating cols.  E.g. src would be duplicated into src.x and src.y.
-  merge(., ., by=c('src', 'subject', 'prob_to', 'time_to')) %>%
+  merge(., ., by=c('src', 'subject', 'dev_prob', 'dev_time')) %>%
   # Remove duplicates since comparing to itself makes no sense
   filter(intervention.x != intervention.y)
 ```
@@ -1420,7 +1421,7 @@ Since we're modeling non-dilutive prizes with no strings attached, the intervent
 ```{r, prize-vs-private-enpv, echo=FALSE}
 print(finals %>%
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
+  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
   geom_point(alpha=1, shape=1) +
   #geom_smooth(method='lm', se=FALSE, col='black') +
   facet_wrap(intervention.y ~ src, ncol=7, scale='free') +
@@ -1449,7 +1450,7 @@ In the first set of plots the data *is* in fact correlated but the variance incr
 ```{r, prize-vs-private-enpv-improvement, echo=FALSE}
 print(finals %>%
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
+  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
   geom_point(alpha=1, shape=1) +
   #geom_smooth(method='lm', se=FALSE) +
   facet_wrap(intervention.y ~ src, ncol=7, scale='free') +
@@ -1483,7 +1484,7 @@ The data organizes itself into "layers", where for any given prize size, the res
 # TODO: This plot yields warnings!
 print(finals %>%
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, enpv.y - enpv.x, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, color=intervention.y)) +
   geom_smooth(method='lm', se=FALSE) +
   geom_point(shape=1) +
   xlab('Prize') +
@@ -1511,7 +1512,7 @@ This is of course also expected since we've already established that late-phase 
 ```{r, prize-vs-go-decision, echo=FALSE}
 finals %>%
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, enpv.y >= 0, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, enpv.y >= 0, color=intervention.y)) +
   geom_jitter(shape=1) +
   facet_grid(cols=vars(src), rows=vars(intervention.y)) +
   theme(legend.position = 'none') +
@@ -1530,7 +1531,7 @@ Running the same plot on the new subset we get a clearer picture of when no's ac
 ```{r, prize-vs-go-decision-in-nos, echo=FALSE}
 finals %>%
   filter(intervention.x == 'NONE' & enpv.x < 0) %>%
-  ggplot(aes(tot_prizes.y, enpv.y >= 0, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, enpv.y >= 0, color=intervention.y)) +
   geom_jitter(shape=1) +
   facet_grid(cols=vars(src), rows=vars(intervention.y)) +
   theme(legend.position = 'none') +
@@ -1550,7 +1551,7 @@ nos <- finals %>% filter(enpv.x < 0 &
                          intervention.x == 'NONE')
 
 go_model <- glm(
-  (enpv.y >= 0) ~ tot_prizes.y * interaction(src, intervention.y),
+  (enpv.y >= 0) ~ dev_prizes.y * interaction(src, intervention.y),
   data = nos,
   family = binomial(link='logit'))
 
@@ -1563,7 +1564,7 @@ In the following plot we clearly see how late-phase prizes must be substantially
 
 ```{r, prize-vs-predicted-go-in-nos, echo=FALSE}
 nos %>%
-  ggplot(aes(tot_prizes.y, pred.go.y*100, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, pred.go.y*100, color=intervention.y)) +
   geom_line() +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
@@ -1584,7 +1585,7 @@ I.e. under the assumption that we cannot a priori distinguish between a sufficie
 
 ```{r, predict-go}
 mod <- glm(
-  (enpv.y >= 0) ~ tot_prizes.y * interaction(src, intervention.x, intervention.y),
+  (enpv.y >= 0) ~ dev_prizes.y * interaction(src, intervention.x, intervention.y),
   data = finals,
   family = binomial(link='logit'))
 
@@ -1594,7 +1595,7 @@ finals$pred.go.y <- predict(mod, type='response')
 ```{r, prize-vs-predicted-go, echo=FALSE}
 finals %>%
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, pred.go.y*100, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, pred.go.y*100, color=intervention.y)) +
   geom_line() +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
@@ -1615,7 +1616,7 @@ When plotting indirect ENPV however we present it as a positive number (i.e. as 
 finals %>%
   #ggplot(aes(prizes / 10^6, -enpv_ind / 10^6, color=intervention)) +
   filter(intervention.x == 'NONE') %>%
-  ggplot(aes(tot_prizes.y, -enpv_ind.y, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, -enpv_ind.y, color=intervention.y)) +
   geom_point(shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=4) +
@@ -1652,7 +1653,7 @@ Analyzing the new plot we realize that while paying for substantially fewer proj
 ```{r, prize-vs-indirect-enpv, echo=FALSE}
 finals %>%
   filter(intervention.x == 'NONE' & enpv.y >= 0) %>%
-  ggplot(aes(tot_prizes.y, -enpv_ind.y, color=intervention.y)) +
+  ggplot(aes(dev_prizes.y, -enpv_ind.y, color=intervention.y)) +
   geom_point(shape=1) +
   geom_smooth(method='lm', se=FALSE) +
   facet_wrap(. ~ src, ncol=4) +
@@ -1691,8 +1692,8 @@ We compute indirect ENPV per output as indirect ENPV (per input) divided by the 
 ```{r, prize-vs-indirect-enpv-in-postgos, echo=FALSE}
 finals %>%
   filter(intervention.x == 'NONE' & enpv.y >= 0) %>%
-  mutate(enpv_ind_per_exit.y = enpv_ind.y/prob_to) %>%
-  ggplot(aes(tot_prizes.y, -enpv_ind_per_exit.y, color=intervention.y)) +
+  mutate(enpv_ind_per_exit.y = enpv_ind.y/dev_prob) %>%
+  ggplot(aes(dev_prizes.y, -enpv_ind_per_exit.y, color=intervention.y)) +
   geom_smooth(method='lm', se=FALSE) +
   # TODO: Reintroduce smooth when we have more data again!
   geom_point(shape=1) +
@@ -1803,7 +1804,7 @@ finals %>%
   filter(intervention.x == 'NONE' &
          pred.go.y < go_lim_up &
          enpv.y >= 0) %>%
-  ggplot(aes(pred.go.y*100, -enpv_ind.y/prob_to, color=intervention.y)) +
+  ggplot(aes(pred.go.y*100, -enpv_ind.y/dev_prob, color=intervention.y)) +
   geom_smooth(method='loess', se=FALSE) +
   facet_wrap(. ~ src, scales='free', nrow=2) +
   xlab('Probability of go-decision (%) under prize size') +
