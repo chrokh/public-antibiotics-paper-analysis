@@ -765,7 +765,9 @@ valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
            enpv = cumsum(epv), # private enpv
            # additional
            enpv_ind = cumsum((-prizes / ((1 + discount_rate_publ) ^ time_to)) * prob_to),
-           enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ time_to)) * prob_to))
+           enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ time_to)) * prob_to)) %>%
+    # Ungroup to avoid surprises when using result
+    ungroup
 }
 ```
 
