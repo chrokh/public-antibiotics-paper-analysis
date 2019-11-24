@@ -600,7 +600,7 @@ As such, we can explore a wide range of inefficiencies.
 subjects <- unique(phases$subject)
 agents <- data.frame(
   subject = subjects,
-  inefficiency = runif(length(subjects), public_inefficiency_min, public_inefficiency_max),
+  publ_inefficiency = runif(length(subjects), public_inefficiency_min, public_inefficiency_max),
   publ_discount_rate = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
 
 phases <- merge(phases, agents, by='subject', all.x=TRUE)
@@ -853,12 +853,12 @@ to_years <- function (phs) {
              subject            = phs$subject,
              phase_year         = x,
              phase              = phs$phase,
-             inefficiency       = phs$inefficiency,
              time,
              cost,
              sales,
              prizes,
              prob,
+             publ_inefficiency  = phs$publ_inefficiency,
              publ_discount_rate = phs$publ_discount_rate,
              priv_discount_rate = phs$priv_discount_rate
              ) %>% filter(whole_step | partial_step) # Only keep relevant data
