@@ -298,8 +298,8 @@ driveab2018_tot_sales_min = 0
 driveab2018_tot_sales_mid = 2559.5
 driveab2018_tot_sales_max = 4336
 driveab2018_market_years = 10
-driveab2018_discount_rate_priv_min = 0.05 * 100
-driveab2018_discount_rate_priv_max = 0.3 * 100
+driveab2018_priv_discount_rate_min = 0.05 * 100
+driveab2018_priv_discount_rate_max = 0.3 * 100
 ```
 
 In line with the assumptions of DRIVE-AB (2018) we assume that sales revenue linearly increase over a period of `r driveab2018_market_years` years.
@@ -314,8 +314,8 @@ data.frame(parameter = 'Total sales (million usd)',
            max = driveab2018_tot_sales_max) %>% kable
 
 data.frame(parameter = 'Private developer discount rate (%)',
-           min = driveab2018_discount_rate_priv_min,
-           max = driveab2018_discount_rate_priv_max) %>% kable
+           min = driveab2018_priv_discount_rate_min,
+           max = driveab2018_priv_discount_rate_max) %>% kable
 ```
 
 ## New assumptions
@@ -488,7 +488,7 @@ sertkaya2014 <- sertkaya2014 %>%
   # Group by subject
   group_by(subject) %>%
   # Sample single discount rate per subject, then ungroup
-  mutate(discount_rate_priv = rtriangle2(1, min, max, mid)) %>%
+  mutate(priv_discount_rate = rtriangle2(1, min, max, mid)) %>%
   ungroup()
 ```
 
@@ -550,16 +550,16 @@ driveab2018 <- driveab2018 %>%
   mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
   # Sample discount rate on a per-subject basis
   group_by(subject) %>%
-  mutate(discount_rate_priv = runif(1,
-                                    driveab2018_discount_rate_priv_min,
-                                    driveab2018_discount_rate_priv_max)) %>%
+  mutate(priv_discount_rate = runif(1,
+                                    driveab2018_priv_discount_rate_min,
+                                    driveab2018_priv_discount_rate_max)) %>%
   ungroup %>%
   # Normalize sampled values
   mutate(time = time / 12,     # months -> years
          cost = cost * 10^6,   # million usd -> usd
          sales = sales * 10^6, # million usd -> usd
          prob = prob / 100,    # percentage -> fraction
-         discount_rate_priv = discount_rate_priv / 100 # percentage -> fraction
+         priv_discount_rate = priv_discount_rate / 100 # percentage -> fraction
          ) %>%
   # Arrange data nicely for printing purposes
   arrange(subject, phase)
@@ -601,7 +601,7 @@ subjects <- unique(phases$subject)
 agents <- data.frame(
   subject = subjects,
   inefficiency = runif(length(subjects), public_inefficiency_min, public_inefficiency_max),
-  discount_rate_publ = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
+  publ_discount_rate = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
 
 phases <- merge(phases, agents, by='subject', all.x=TRUE)
 ```
@@ -759,7 +759,7 @@ valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
            # cashflows
            cashflow = sales + prizes - cost,
            ev = cashflow * prob_to,
-           pv = cashflow / ((1 + discount_rate_priv) ^ time_to),
+           pv = cashflow / ((1 + priv_discount_rate) ^ time_to),
            epv = pv * prob_to,
            # cumulatives
            cum = cumsum(cashflow),
@@ -767,8 +767,8 @@ valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
            npv = cumsum(pv),
            enpv = cumsum(epv), # private enpv
            # additional
-           enpv_ind = cumsum((-prizes / ((1 + discount_rate_publ) ^ time_to)) * prob_to),
-           enpv_dir = cumsum((-cost / ((1 + discount_rate_publ) ^ time_to)) * prob_to)) %>%
+           enpv_ind = cumsum((-prizes / ((1 + publ_discount_rate) ^ time_to)) * prob_to),
+           enpv_dir = cumsum((-cost / ((1 + publ_discount_rate) ^ time_to)) * prob_to)) %>%
     # Ungroup to avoid surprises when using result
     ungroup
 }
@@ -859,8 +859,8 @@ to_years <- function (phs) {
              sales,
              prizes,
              prob,
-             discount_rate_publ = phs$discount_rate_publ,
-             discount_rate_priv = phs$discount_rate_priv
+             publ_discount_rate = phs$publ_discount_rate,
+             priv_discount_rate = phs$priv_discount_rate
              ) %>% filter(whole_step | partial_step) # Only keep relevant data
 
     # Append
@@ -995,7 +995,7 @@ Finally, we plot the discount rate data.
 ```{r, summary-discount-rates, echo=FALSE}
 phases %>%
   filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, discount_rate_priv*100, color=src, fill=src)) +
+  ggplot(aes(phase, priv_discount_rate*100, color=src, fill=src)) +
   geom_violin() +
   ylab('Discount rate (%)') +
   xlab('Phase') +
