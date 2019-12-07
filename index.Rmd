@@ -69,6 +69,9 @@ rtriangle2 <- function(n, mins, maxs, mids) {
   xs
 }
 
+log10_sample <- function (n, min, max, magnitude_min, magnitude_max)
+  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
+
 # The phases we'll be working with
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
 MARKET_PHASES <- paste('M', 1:20, sep='')
@@ -614,9 +617,6 @@ In other words, every subject is copied n+1 times, where n is the number of inte
 This allows us to perform "within subject analysis" when comparing treatments against each other and against placebo.
 
 ```{r, intervention-sample}
-log10_sample <- function (n, min, max, magnitude_min, magnitude_max)
-  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
-
 intervened <- phases %>%
   # Cartesian product merge with intervention dist
   merge(., intervention_dist) %>%
