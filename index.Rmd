@@ -5,10 +5,11 @@ author: Christopher Okhravi
 date: 2019
 output:
   bookdown::gitbook:
+    css: style.css
     split_by: section
     config:
       toc:
-        collapse: subsubsection
+        collapse: subsection
 ---
 
 
@@ -33,12 +34,12 @@ If you need further details, please consult the source code used to generate the
 
 # Input data
 We begin by setting `N` which will dictate the number of project samples that we'll draw from each dataset.
-Meaning that if one considers all the data sets at once then the number of random projects drawn is in total `N` times the number of data sets considered.
+Meaning that if one considers all the data sets at once then the number of random projects drawn in total is `N` times the number of data sets considered.
 In other words, `N` is the number of random samples that we'll draw from a stochastic representation of a hypothetical antibiotic R&D project.
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 
 ```{r, set-n}
-N = 20
+N = 1500
 ```
 
 ```{r, basics, include=FALSE}
@@ -51,12 +52,16 @@ library(gridExtra)
 library(ggpubr)
 library(triangle)
 library(scales)
+library(cowplot)
+library(broom)
+library(purrr)
+library(forcats)
 
 # Cache code chunks
 knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
 
 # Set seed for reproducibility
-set.seed(1)
+set.seed(3)
 
 # NOTE: I can't figure out how to sample from multiple triangular distributions
 # at the same time using rtriangle, so here's my sloppy quickfix implementation.
@@ -82,7 +87,7 @@ The data in this analysis stem from two publications, Sertkaya et. al (2014) and
 The latter considers only a single hypothetical antibiotic, while the former considers six hypothetical antibiotics targeting different indications.
 Our analysis is thus applied to seven data sets stemming from two publications.
 Disclaimer: The data in DRIVE-AB (2018) is heavily based on Sertkaya et. al (2014) and is thus not an independently collected dataset.
-Nevertheless the spread of data across the seven datasets will hopefully convince the reader that our conclusions hold over a wide range of input data variation.
+Nevertheless the spread of data across the seven datasets means that a wide range of input is explored.
 
 
 
@@ -295,7 +300,6 @@ driveab2018_phase_dist <-
 kable(driveab2018_phase_dist, caption = 'driveab2018_phase_dist')
 ```
 
-
 ```{r, driveab-additional-params, echo=FALSE}
 driveab2018_tot_sales_min = 0
 driveab2018_tot_sales_mid = 2559.5
@@ -321,10 +325,10 @@ data.frame(parameter = 'Private developer discount rate (%)',
            max = driveab2018_priv_discount_rate_max) %>% kable
 ```
 
-## New assumptions
-To perform our analysis (comparing the cost of direct and indirect funding, as well as alternative payout phases for indirect funding) we require two additional parameters.
+## Benefactor parameters
+To perform our analysis we require two additional parameters.
 First, a "public" or "social" discount rate that is representative of the cost of capital of the benefactor, i.e. the body that pays for the intervention with no expectation of monetary return.
-Second, an inefficiency parameter that will be used to measure the fact that many argue that agents with no expectation of monetary returns (e.g. states) are less efficient.
+Second, an inefficiency parameter that will be used to measure the fact that many argue that agents with lower expectation of monetary returns (e.g. states) are often assumed to be less efficient.
 We uniformly distribute these parameters as per the table below.
 
 ```{r, additional-dist, echo=FALSE}
@@ -332,19 +336,18 @@ public_discount_rate_min <- 0.035
 public_discount_rate_max <- 0.045
 
 public_inefficiency_min <- 0
-public_inefficiency_max <- 3
+public_inefficiency_max <- 1
 
 data.frame(parameter = c('Public discount rate (%)',
-                         'Public inefficiency (multiplier)'),
+                         'Public inefficiency (%)'),
            min = c(public_discount_rate_min * 100,
-                   public_inefficiency_min),
+                   public_inefficiency_min * 100),
            max = c(public_discount_rate_max * 100,
-                   public_inefficiency_max)) %>% kable
+                   public_inefficiency_max * 100)) %>% kable
 ```
 
 ## Interventions distribution
-We apply five interventions (treatments) to our base data sets and later analyze their effects on the valuation metrics.
-We model these interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
+We model interventions as qualitatively (categorically) different, as they operate on different R&D phases, but theoretically they could be considered the same intervention that is quantitatively (numerically) different in terms of its actuation time.
 The intervention can be described as a unconditional, non-dilutive prize.
 This intervention can be considered a generalization of what is commonly referred to as either a market entry reward or a phase entry reward, where we've generalized the time of actuation.
 Prize size is quantitatively varied stochastically.
@@ -355,15 +358,29 @@ In the analysis we at all times "control for" prizes which means that the chosen
 The table below show the intervention distribution that we are sampling from.
 
 ```{r, intervention-dist, echo=FALSE}
-intervention_dist <- # Expressed in million usd
-  data.frame(target = factor(c('P1','P2','P3','P4','M1'),
-                             levels=PHASES, ordered=TRUE),
-             intervention = c('P1ER','P2ER','P3ER','P4ER','PDMER'),
-             prize_min = 1,
-             prize_max = 19.999,
-             magn_min = -1,
-             magn_max = 3)
-kable(intervention_dist, caption='Interventions (million usd)')
+intervention_dist_prize_min <- 1
+intervention_dist_prize_max <- 9.999999999
+intervention_dist_magn_min <- 5
+intervention_dist_magn_max <- 9
+
+# Print as table
+# TODO: More descriptive table headers
+data.frame(parameter = c('Multiplier', 'Exponent'),
+           min = c(intervention_dist_prize_min,
+                   intervention_dist_magn_min),
+           max = c(intervention_dist_prize_max,
+                   intervention_dist_magn_max)) %>%
+  kable(caption='Interventions')
+```
+
+While the intervention prize size can be thought of as the treatment dosage, the intervention phase can be thought of as the treatment type.
+The table below report which phases we apply interventions to.
+
+```{r, prize-phase-distribution, echo=FALSE}
+intervention_phase_dist <-
+  data.frame(prize_phase = factor(c('P1', 'P2', 'P3', 'P4', 'M1'),
+                                  levels=PHASES, ordered=TRUE))
+kable(intervention_phase_dist, caption='Intervention target phases')
 ```
 
 # Sampling
@@ -481,19 +498,6 @@ sertkaya2014 <- sertkaya2014 %>%
 # efficient and doesn't introduce NAs. Is this a better solution?
 ```
 
-Finally we sample developer discount rates and add it to our Sertkaya sample.
-
-```{r, sertkaya-add-discount-rate}
-min <- sertkaya2014_private_discount_rate_min / 100 # Percentage to fraction
-max <- sertkaya2014_private_discount_rate_max / 100 # Percentage to fraction
-mid <- sertkaya2014_private_discount_rate_mid / 100 # Percentage to fraction
-sertkaya2014 <- sertkaya2014 %>%
-  # Group by subject
-  group_by(subject) %>%
-  # Sample single discount rate per subject, then ungroup
-  mutate(priv_discount_rate = rtriangle2(1, min, max, mid)) %>%
-  ungroup()
-```
 
 ## DRIVE-AB sample
 
@@ -551,267 +555,118 @@ driveab2018 <- driveab2018 %>%
   mutate(src = 'DRIVE-AB (2018)') %>%
   # Convert phase to ordered factor
   mutate(phase = factor(phase, levels=PHASES, ordered=TRUE)) %>%
-  # Sample discount rate on a per-subject basis
-  group_by(subject) %>%
-  mutate(priv_discount_rate = runif(1,
-                                    driveab2018_priv_discount_rate_min,
-                                    driveab2018_priv_discount_rate_max)) %>%
-  ungroup %>%
   # Normalize sampled values
   mutate(time = time / 12,     # months -> years
          cost = cost * 10^6,   # million usd -> usd
          sales = sales * 10^6, # million usd -> usd
          prob = prob / 100,    # percentage -> fraction
-         priv_discount_rate = priv_discount_rate / 100 # percentage -> fraction
          ) %>%
   # Arrange data nicely for printing purposes
   arrange(subject, phase)
 ```
 
 
+## Additional parameters
+First we sample one developer discount rate per subject (i.e. project) in the sertkaya dataset, using the discount rate distribution from the sertkaya source.
 
+```{r, sample-sertkaya-discount-rate}
+min <- sertkaya2014_private_discount_rate_min / 100 # Percentage to fraction
+max <- sertkaya2014_private_discount_rate_max / 100 # Percentage to fraction
+mid <- sertkaya2014_private_discount_rate_mid / 100 # Percentage to fraction
+sertkaya2014_discount_rates <- sertkaya2014 %>%
+  select(subject) %>%
+  unique %>%
+  mutate(priv_discount_rate = rtriangle2(n(), min, max, mid))
+```
 
-## New assumptions sample
-TODO: ADD MORE EXPLANATORY TEXT HERE.
-Before proceeding, we'll combine all datasets (sources) into a single dataset containing all sources.
+We then do the same for the DRIVE-AB dataset and source.
+
+```{r, sample-driveab-discount-rate}
+min <- driveab2018_priv_discount_rate_min / 100 # Percentage to fraction
+max <- driveab2018_priv_discount_rate_max / 100 # Percentage to fraction
+driveab2018_discount_rates <- driveab2018 %>%
+  select(subject) %>%
+  unique %>%
+  mutate(priv_discount_rate = runif(n(), min, max))
+```
+
+We then amalgamate these two datasets so that we have a single dataset containing samples from both origins
+
+```{r, combine-discount-rate-samples}
+additional <- rbind(sertkaya2014_discount_rates, driveab2018_discount_rates)
+```
+
+We then sample a public discount rate and add it as a column to the amalgamated dataframe.
+
+```{r, sample-public-discount-rate}
+min <- public_discount_rate_min
+max <- public_discount_rate_max
+additional <- additional %>% mutate(publ_discount_rate = runif(n(), min, max))
+```
+
+And then do the same for public inefficiencies.
+
+```{r, sample-public-inefficiency}
+min <- public_inefficiency_min
+max <- public_inefficiency_max
+additional <- additional %>% mutate(publ_inefficiency = runif(n(), min, max))
+```
+
+Finally we sample and add intervention prize sizes.
+
+```{r, sample-intervention-prize-size}
+prize_min <- intervention_dist_prize_min
+prize_max <- intervention_dist_prize_max
+magn_min <- intervention_dist_magn_min
+magn_max <- intervention_dist_magn_max
+additional <- additional %>%
+  mutate(prize_size = log10_sample(n(), prize_min, prize_max, magn_min, magn_max))
+```
+
+Below is an excerpt of the resulting dataframe.
+
+```{r, agents-excerpt, echo=FALSE}
+kable(head(additional, n=10))
+```
+
+And a histogram of the sampled intervention prize sizes.
+
+```{r, prize-size-histogram, echo=FALSE}
+additional %>%
+  ggplot(aes(prize_size)) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  geom_histogram()
+```
+
+Before moving further we also combine the Sertkaya and DRIVE-AB samples into a single dataframe.
 
 ```{r, combine}
 phases <-
+  # Merge data sources
   rbind(sertkaya2014, driveab2018) %>%
-  arrange(subject, src, phase) %>%
-  # Convert phase column to ordered factor
-  mutate(phase = factor(phase, levels=PHASES, ordered=TRUE))
-```
-
-```{r, precompute, include=FALSE, dependson=-1}
-# To avoid recomputing all the time we'll also store the names of the different sources:
-sources <- unique(phases$src)
-# To avoid misspellings of factors, let's use levels:
-metrics <- c('cashflow', 'ev', 'pv', 'epv')
-cum_metrics <- c('cum', 'env', 'npv', 'enpv')
-add_metrics <- c('enpv_dir', 'enpv_ind')
-```
-
-Public discount rate varies across subjects but not within.
-
-In the analysis we will also explore the effect of various levels of public sector inefficiency.
-The assumptions are explained in further detail in the analysis section.
-In most of the calculations, the inefficiency parameter is ignored, and when used we will control for it.
-As such, we can explore a wide range of inefficiencies.
-
-```{r, sample-discount-rates-and-inefficiency, dependson=-1}
-subjects <- unique(phases$subject)
-agents <- data.frame(
-  subject = subjects,
-  publ_inefficiency = runif(length(subjects), public_inefficiency_min, public_inefficiency_max),
-  publ_discount_rate = runif(length(subjects), public_discount_rate_min, public_discount_rate_max))
-
-phases <- merge(phases, agents, by='subject', all.x=TRUE)
+  # Convert phase to ordered factor
+  mutate(phase = factor(phase, levels=PHASES, ordered=T))
 ```
 
 
-## Interventions sample
-Sampled prize sizes vary across subjects, but not within subjects.
-This means that a given subject has the same prize size applied as many times as there are interventions.
-In other words, every subject is copied n+1 times, where n is the number of interventions, and the additional copy is the original without an intervention applied, i.e. the "control treatment" or "placebo".
-This allows us to perform "within subject analysis" when comparing treatments against each other and against placebo.
-
-```{r, intervention-sample}
-intervened <- phases %>%
-  # Cartesian product merge with intervention dist
-  merge(., intervention_dist) %>%
-  # Group by subject (but not by phase) since intervention size should remain
-  # the same within the same subject. Then sample intervention prizes and
-  # normalize by converting from million usd to usd.
-  group_by(subject) %>%
-  mutate(sample = log10_sample(1, prize_min, prize_max, magn_min, magn_max) * 10^6) %>%
-  ungroup %>%
-  # Add sample to prizes column at appropriate phase
-  mutate(prizes = ifelse(phase == target, sample, 0)) %>%
-  # Remove temp columns
-  select(-sample, -target, -prize_min, -prize_max, -magn_min, -magn_max) %>%
-  # Add control group
-  rbind(., phases %>% mutate(prizes = 0, intervention = 'NONE'))
-```
-
-
-# Valuation metrics
-We employ the following financial metrics for cashflows:
-
-- Non-capitalized value / Out-of-pocket value
-- Risk-adjusted value (rV) / Expected value (EV)
-- Capitalized value / Present value (PV)
-- Risk-adjusted present value (rPV) / Expected present value (EPV)
-
-Symmetrically, when cumulating cashflows, the above financial metrics are known as:
-
-- Cumulative non-capitalized value / Cumulative out-of-pocket value
-- Cumulative risk-adjusted value (Cumulative rV) / Cumulative expected value (Cumulative EV)
-- Net present value (NPV)
-- Risk-adjusted net present value (rNPV) / Expected net present value (ENPV)
-
-We compute **Expected Value (EV)** as:
-
-$$
-EV_t = (R_t - C_t) * P_t
-$$
-
-where $R_t$ and $C_t$ are the revenues and costs (respectively) at time $t$, and $P_t$ the probability of reaching the cashflow from the point of evaluation.
-The probability of reaching a given timestep $t_n$ from a point of evaluation $t_0$ is simply computed as: $P_t = \prod_{t_0}^{t^n}$.
-Next, we compute **Present Value (PV)** as:
-
-$$
-\mathit{PV}_t = \frac{R_t - C_t}{(1 + i)^t}
-$$
-
-where $i$ is the discount rate of the evaluator, and $t$ is the time to the phase from the point of evaluation.
-We compute **Expected Present Value (EPV)** as:
-
-$$
-\mathit{EPV}_t = \frac{R_t - C_t}{(1 + i)^t} * P_t
-$$
-
-Moving on to the cumulative valuations, we compute **Net Expected Value (ENV)**, **Net Present Value (NPV)**, and **Expected Net Present Value (ENPV)** as:
-$\sum_{t\in T} \mathit{EV}_t$
-
-$$
-\mathit{ENV_T} = \sum_{t\in T} EV_t\\
-$$
-
-$$
-\mathit{NPV_T} = \sum_{t\in T} \mathit{PV}_t\\
-$$
-
-$$
-\mathit{ENPV_T} = \sum_{t\in T} \mathit{EPV}_t\\
-$$
-
-respectively, where $t$ is the time to the phase, and $T$ is the times to all timesteps of all phases for the project in evaluation.
-
-<div class="alert alert-danger">
-TODO: Verify that the probability portion of ENPV is actually computed accordingly!
-</div>
-
-The question we want to explore in the analysis is whether it is cheaper for the benefactor to directly or indirectly fund antibiotics R&D.
-Directly here refers to the idea of simply paying for development "at cost".
-Indirectly refers to the idea of issuing prizes that encourage private developers to undertake a given activity with the hope of winning said prize.
-
-We compare these two different approaches by comparing their expected costs when facing a hypothetical project entering pre-clinical.
-We assume that the valuation metric that private actors employ is ENPV and that the valuation method is yearly.
-We refer to this value as *private ENPV.*
-As previously described, ENPV takes both the opportunity cost of capital and the risk of project failure into consideration.
-In other words, ENPV computes the discounted expected value of (in this case) a series of investments with potential future return.
-
-We assume that positive private ENPV in pre-clinical yields a go-decision while negative value yields a no-decision.
-From a given sample we can then compute the ratio between the number of projects that face go-decision and the number that do not.
-We refer to this as the go-rate.
-
-While we now have a way of reasoning about the effectiveness of a given prize, we must combine that information with its cost in order to explore its efficiency.
-In order to reason about the cost, for the benefactor of issuing a prize we compute the necessarily negative ENPV of issuing said prize.
-This can be thought of as the expected, capitalized cost of issuing the intervention publicly and then paying for every successful candidate without receiving any financial return whatsoever.
-The metric takes both the opportunity cost (cost of capital) and project risk of failure into consideration.
-Taking opportunity cost into consideration is important as the benefactor looses the opportunity to activate their money elsewhere when making a payment to a beneficiary.
-Taking risk into consideration is important as the benefactor will not necessarily pay the promised prize size, due to projects being highly risky.
-The only cashflow considered in the ENPV calculation is the prize, but since we compute ENPV we take the fact that not all developers reach the point of the prize and that even if they do that time will be in the future.
-We refer to the expected cost of a prize (i.e. indirect funding) as *indirect ENPV*.
-As previously described, we assume that the benefactor is the public sector and employ a uniformly distributed discount rate between `r public_discount_rate_min * 100`% and `r public_discount_rate_max * 100`%.
-Indirect ENPV can be thought of as the expected cost of issuing a prize (for the benefactor).
-
-As we will compare the cost of issuing a prize (indirect funding) to that of directly paying for projects (direct funding) we must also have a way of estimating the cost of paying for projects at-cost.
-We again take both the opportunity cost of capital and project risk of failure into consideration and therefore again employ ENPV.
-We again disregard any project revenues, since we're again computing the cost of supporting the project as a benefactor
-The cashflows used in the ENPV calculation are therefore all the costs.
-We assume that the benefactor issuing the direct intervention is the same as the one issuing indirect interventions.
-Hence, we use the same discount rate distribution in both cases
-(`r public_discount_rate_min * 100`% - `r public_discount_rate_max * 100`%).
-We refer to the expected cost of paying for the project at cost (i.e. direct funding) as *direct ENPV*.
-
-| Valuation metric | Summary |
-|-----|-----|
-| Private ENPV  | The expected (private) value of a project.         |
-| Indirect ENPV | The expected cost of issuing a prize.              |
-| Direct ENPV   | The expected cost of paying for a project at-cost. |
-
-
-Programatically, we use the function below to compute the valuation metrics from all phases to all phases, given some input dataset.
-
-```{r, valuation-function}
-# NOTE: The column 'order' is required so that the function knows how to order
-# rows of a given subject.
-valuation <- function(df, vantage_points=c('PC','P1','P2','P3','P4','M1')) {
-  df %>%
-    # Cartesian product merge (copy each row per vantage point)
-    merge(., data.frame(from = factor(vantage_points, levels=PHASES, ordered=TRUE))) %>%
-    # Valuation is subject and vantage point specific
-    group_by(src, intervention, subject, from) %>%
-    # Remove events that happened before vantage point
-    filter(phase >= from) %>%
-    # Ensure order is based on order column
-    arrange(order) %>%
-    # Valuation
-    mutate(# subject info
-           dev_prizes = sum(prizes), # total prizes available
-           dev_time = sum(ifelse(phase < 'M1', time, 0)), # time to market
-           dev_prob = prod(ifelse(phase < 'M1', prob, 1)), # prob to market
-           # helpers
-           time_to = cumsum(time) - time,
-           prob_to = cumprod(prob) / prob,
-           # cashflows
-           cashflow = sales + prizes - cost,
-           ev = cashflow * prob_to,
-           pv = cashflow / ((1 + priv_discount_rate) ^ time_to),
-           epv = pv * prob_to,
-           # cumulatives
-           cum = cumsum(cashflow),
-           env = cumsum(ev),
-           npv = cumsum(pv),
-           enpv = cumsum(epv), # private enpv
-           # additional
-           enpv_ind = cumsum((-prizes / ((1 + publ_discount_rate) ^ time_to)) * prob_to),
-           enpv_dir = cumsum((-cost / ((1 + publ_discount_rate) ^ time_to)) * prob_to)) %>%
-    # Ungroup to avoid surprises when using result
-    ungroup
-}
-```
-
-
-# Valuation methods
+# Valuation
 As phase durations are long, the time value of money not only greatly reduces the attractiveness of revenues, but also dampen the pain of costs.
 To take the time value of money into account we must make an assumption about how a real world evaluation of a project periodizes future costs, revenues and probabilities.
 In other words, how a hypothetical evaluator chooses to transform a sequence of discrete phases into a sequence of discrete and uncertain cashflows.
-We make the assumption that the evaluator converts every phase into a series of years in order to properly discount the cashflow of the given phase.
-This method yields slightly different results when compared to simply applying financial valuation metrics to the sequence of phases under the assumption that all cashflows for a given phase occur immediately upon entering that phase.
-To elucidate the consequence of these differences we will first apply financial metrics directly to the phase-based data, then transform the original data to a year-based form and apply the same metrics, and then finally compare the two.
+We make the assumption that the evaluator converts every phase into a series of years and evenly (i.e. constantly) distribute all cashflows and probabilities of success over these years within a phase.
 
-
-## Phase-based method
-The phase-based method is very straight forward since it assumes that all cashflows related to a phase occur immediately upon phase entry.
-We can therefore apply our valuation function to the original dataset directly.
-
-```{r, phase-based-valuation}
-phasely_valuation <-
-  # Add order column before passing to valuation function
-  valuation(intervened %>% mutate(order = phase)) %>%
-  # Remove temp order column
-  select(-order)
-```
-
-## Year-based method
-To consider the fact that all cashflows of a phase do not occur immediately upon phase-entry we convert our phase-based data to year-based data and make assumptions as to how the values are interpolated over the years of a phase.
 We use the function below to convert from phase-form to year-form.
-We use the same function to convert to year based data again after having introduced prizes.
 Note however that we do not interpolate prizes but rather assume that they are introduced as lump sums.
 
 ```{r, year-based-conversion}
-#' Converts a data set in phase-form to year-form.
-#'
-#' @param phases Dataframe in phase-form.
-#' @return Dataframe in year-form
 to_years <- function (phs) {
 
   # Add timestamps to every observation
   phs <- phs %>%
-    group_by(src, intervention, subject) %>%
+    group_by(subject) %>%
     arrange(phase) %>%
     mutate(time_to = cumsum(time) - time)
 
@@ -844,23 +699,17 @@ to_years <- function (phs) {
     sales  <- ifelse(whole_step, sales_step, sales_remainder)
     prob   <- ifelse(whole_step, prob_step, prob_remainder)
     time   <- ifelse(whole_step, time_step, time_remainder)
-    prizes <- if (x == 1) phs$prizes else 0 # Immediate lump-sum
 
     # Make tibble
     year <-
       tibble(src                = phs$src,
-             intervention       = phs$intervention,
              subject            = phs$subject,
              phase_year         = x,
              phase              = phs$phase,
              time,
              cost,
              sales,
-             prizes,
-             prob,
-             publ_inefficiency  = phs$publ_inefficiency,
-             publ_discount_rate = phs$publ_discount_rate,
-             priv_discount_rate = phs$priv_discount_rate
+             prob
              ) %>% filter(whole_step | partial_step) # Only keep relevant data
 
     # Append
@@ -868,9 +717,12 @@ to_years <- function (phs) {
   }
   phase_years
 }
+```
 
-# And then we convert
-years <- to_years(intervened)
+And then we convert.
+
+```{r, phasely-to-yearly}
+years <- to_years(phases)
 ```
 
 We have now converted our phase-based data to year-based data.
@@ -880,556 +732,234 @@ In other words, if P1 entry would occur after 5.3 years then we will distribute 
 If the duration of P1 is 2.5 years then P2 would start at year 5.3 and end at year 7.8.
 While we would divide P1 into three equidistant (years) points (years), that start from year 5.3, 6.3, and 7.3 (respectively) they are not equidistant from the PC steps.
 
-We can now compute the same valuation metrics we computed for the phase-based method but this time for the year-based method:
 
-```{r, year-based-valuation}
-# Compute absolute time to phases
-yearly_valuation <-
-  valuation(years %>%
-            group_by(src, intervention, subject) %>%
-            arrange(phase, phase_year) %>%
-            mutate(order = cumsum(time) - time)) %>%
-  # Compute year column
-  mutate(year = round(time_to)) %>%
-  # Remove temp order column
-  select(-order)
+Below is an excerpt of the resulting dataset.
+
+```{r, yearly-excerpt, echo=FALSE}
+kable(head(years %>% arrange(subject, phase, phase_year), n=25))
 ```
 
 
+## Valuation metrics
+We employ the following financial metrics for cashflows:
 
-# Summary statistics
-We now present some summary statistics.
-First, to sanity check that our samples seem to be properly drawn from their respective distributions.
-Then, to explore what valuations we reach using our different valuations methods and metrics.
+- Non-capitalized value / Out-of-pocket value
+- Risk-adjusted value (rV) / Expected value (EV)
+- Capitalized value / Present value (PV)
+- Risk-adjusted present value (rPV) / Expected present value (EPV)
 
-Unless otherwise specified, this chapter presents statistics based on the "control" sample, i.e. **with no** interventions or inefficiencies applied.
+When cumulating cashflows, the above financial metrics are respectively known as:
 
-## Development data
-We first plot development data.
+- Cumulative non-capitalized value / Cumulative out-of-pocket value
+- Cumulative risk-adjusted value (Cumulative rV) / Cumulative expected value (Cumulative EV)
+- Net present value (NPV)
+- Risk-adjusted net present value (rNPV) / Expected net present value (ENPV)
 
-```{r, summary-violins, echo=FALSE, warning=FALSE, message=FALSE}
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, cost/10^6, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Cost (million USD)')
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, time, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Time (months)')
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, prob*100, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Probability of success (%)')
-```
+We compute **Expected Value (EV)** as:
 
-## Sales data
-Below we plot the sampled sales data.
+$$
+EV_t = (R_t - C_t) * P_t
+$$
 
-```{r, summary-sales, echo=FALSE}
-phases %>%
-  filter(phase %in% MARKET_PHASES) %>%
-  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
-  geom_violin() +
-  facet_wrap(. ~ phase, scale='free') +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Sales (million USD)')
+where $R_t$ and $C_t$ are the revenues and costs (respectively) at time $t$, and $P_t$ the probability of reaching the cashflow from the point of evaluation.
+The probability of reaching a given timestep $t_n$ from a point of evaluation $t_0$ is simply computed as: $P_t = \prod_{t_0}^{t^n}$.
+Next, we compute **Present Value (PV)** as:
 
-# TODO: Replace this plot with lines of max/min or similar
-phases %>%
-  filter(phase %in% MARKET_PHASES) %>%
-  ggplot(aes(phase, sales/10^6, color=src, fill=src)) +
-  geom_violin() +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Sales (million USD)')
+$$
+\mathit{PV}_t = \frac{R_t - C_t}{(1 + i)^t}
+$$
 
-phases %>%
-  group_by(src, subject) %>%
-  summarize(tot_sales = sum(sales)) %>%
-  ggplot(aes(src, tot_sales/10^6, fill=src)) +
-  geom_violin() +
-  theme(legend.position='top',
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        panel.grid.minor.x=element_blank(),
-        panel.grid.major.x=element_blank()) +
-  ylab('Total sales (million USD)')
-```
+where $i$ is the discount rate of the evaluator, and $t$ is the time to the phase from the point of evaluation.
+We compute **Expected Present Value (EPV)** as:
 
-Finally, we plot the discount rate data.
+$$
+\mathit{EPV}_t = \frac{R_t - C_t}{(1 + i)^t} * P_t
+$$
 
-```{r, summary-discount-rates, echo=FALSE}
-phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  ggplot(aes(phase, priv_discount_rate*100, color=src, fill=src)) +
-  geom_violin() +
-  ylab('Discount rate (%)') +
-  xlab('Phase') +
-  theme(legend.position = 'top')
-```
+Moving on to the cumulative valuations, we compute
 
-## Phase comparison
-Interestingly, some parameters are quite dispersly distributed between phases.
-Below, we plot the mean percentage of a given property occuring in a given phase for all phases.
+**Net Expected Value (ENV)** as:
 
-```{r, summary-phase-distribution-means, echo=FALSE, warning=FALSE, message=FALSE}
-# Transform: phase properties to long from wide
-phase_props <- phases %>%
-  filter(phase %in% DEVELOPMENT_PHASES) %>%
-  select(src, subject, phase, cost, time, prob) %>%
-  gather(key='prop', value='value', -src, -subject, -phase) %>%
-  group_by(src, subject, prop) %>%
-  mutate(total = sum(value),
-         ratio = value / total) # NOTE: will cause NaN if 0/0
+$$
+\mathit{ENV_T} = \sum_{t\in T} EV_t\\
+$$
 
-phase_props %>%
-  group_by(src, phase, prop) %>%
-  summarise(ratio = mean(ratio)) %>%
-  filter(is.finite(ratio)) %>%
-  ggplot(aes(src, ratio * 100)) +
-  geom_bar(stat='identity', aes(fill=phase), position='stack') +
-  labs(fill='') +
-  facet_wrap(. ~ prop) +
-  theme(axis.text.x = element_text(angle=90, hjust=1))
+**Net Present Value (NPV)** as:
 
-phase_props %>%
-  group_by(src, phase, prop) %>%
-  summarise(ratio = mean(ratio)) %>%
-  filter(is.finite(ratio)) %>%
-  ggplot(aes(phase, ratio * 100)) +
-  geom_bar(stat='identity', aes(fill=src), position='dodge') +
-  labs(fill='') +
-  facet_wrap(. ~ prop) +
-  theme(axis.text.x = element_text(angle=90, hjust=1),
-        legend.position = 'top')
-```
+$$
+\mathit{NPV_T} = \sum_{t\in T} \mathit{PV}_t\\
+$$
 
-## Prize sizes
-The histogram below depict our sampled intervention prizes at their corresponding phases.
+and **Expected Net Present Value (ENPV)** as:
 
-```{r, prize-summary, echo=FALSE, message=FALSE}
-print(intervened %>%
-      filter(prizes > 0) %>%
-      ggplot(aes(prizes, fill=phase)) +
-      geom_histogram() +
-      facet_wrap(interaction(intervention, phase)~., ncol=3) +
-      scale_x_continuous(label = unit_format(unit='', scale=1e-9),
-                         breaks = pretty_breaks(8)) +
-      xlab('USD (billions)') +
-      ylab(element_blank()) +
-      theme(axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            axis.text.y = element_blank()) +
-      guides(fill = FALSE))
-```
+$$
+\mathit{ENPV_T} = \sum_{t\in T} \mathit{EPV}_t\\
+$$
 
-## Phase-based summary
-Let us now look at some summary statistics of using the phase-based method.
+where $t$ is the time to the phase, and $T$ is the times to all timesteps of all phases for the project in evaluation.
 
-```{r, phase-based-wrangling, echo=FALSE}
-# Long
-phasely_valuation_long <- phasely_valuation %>%
-  select(src, intervention, subject, from, phase, dev_prizes,
-         cashflow, ev, pv, epv,
-         cum, env, npv, enpv,
-         enpv_dir, enpv_ind) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -phase, -dev_prizes) %>%
-  transform(metric = factor(metric, levels = c(metrics, cum_metrics, add_metrics)))
+<div class="alert alert-danger">
+TODO: Verify that the probability portion of ENPV is actually computed accordingly!
+</div>
 
-# Final valuations
-phasely_final_valuation <- phasely_valuation %>%
-  group_by(src, intervention, subject, from, dev_prizes) %>%
-  arrange(phase) %>%
-  summarize(cum = tail(cum, n=1),
-            epv = tail(epv, n=1),
-            npv = tail(npv, n=1),
-            enpv = tail(enpv, n=1),
-            enpv_dir = tail(enpv_dir, n=1),
-            enpv_ind = tail(enpv_ind, n=1)) %>%
-  ungroup
+## Valuation perspectives
+To compare the cost of direct and indirect funding we need a way to compute the costs of each.
+In order to determine the cost of indirect funding, we need a way to determine which projects will reach a go-decision under a given prize intervention since this will determine which projects the benefactor actually pays for.
+Lastly, many argue that planning without respecting market logic inherently involves a certain level of inefficiency and for this reason we must have a way of computing the cost of indirect funding under different inefficiencies.
 
-# Final long
-phasely_final_valuation_long <- phasely_valuation_long %>%
-  filter(metric %in% c(cum_metrics, add_metrics)) %>%
-  group_by(src, intervention, subject, from, metric, dev_prizes) %>%
-  arrange(phase) %>%
-  summarize(value = tail(value, n=1)) %>%
-  ungroup
-```
+The above, leads us to the four different perspectives outlined in the table below.
 
-Let us first plot the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
-Note the usage of different scales across the different metrics due the vastly different values.
+| Perspective        | Summary                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| Private            | The private value of a project.                                                            |
+| Intervened private | The private value of a project given the existance of a prize intervention.                |
+| Indirect           | The negative value of issuing a prize intervention.                                        |
+| Direct             | The negative value of paying for a project at-cost.                                        |
+| Inefficient direct | The negative value of paying for a project at-cost under some operating inefficiency.      |
 
+Any of the previously outlined valuation metrics can be computed from any of these perspectives.
+Computing e.g. ENPV would yield the following valuations:
 
-```{r, phase-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE' & from == 'PC' & metric %in% cum_metrics) %>%
-  ggplot(aes(metric, value / 10^6, fill=src)) +
-  geom_boxplot() +
-  ylab('USD (millions)') +
-  xlab(element_blank()) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  facet_wrap(. ~ metric, scale='free', nrow=1) +
-  theme(legend.position = 'top')
-```
+| Valuation metric          | Summary                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| Private ENPV              | The expected and capitalized private value of a project.                                                       |
+| Intervened private ENPV   | The expected and capitalized private value of a project given the existance of a prize intervention.           |
+| Indirect ENPV             | The expected and capitalized negative value of issuing a prize intervention.                                   |
+| Direct ENPV               | The expected and capitalized negative value of paying for a project at-cost.                                   |
+| Inefficient direct ENPV   | The expected and capitalized negative value of paying for a project at-cost under some operating inefficiency. |
 
-Another way to look at the data is to consider how starting at different phases alter the value of the project.
-Below we combine all datasets and plot the mean value (across all datasets) of bringing the project to completion from various starting phases, using the four cumulative metrics.
-The vertical lines delimit +/- 1 standard deviation from the sample mean (i.e. ~68% of the data).
-The second plot depicts the mean valuations within each dataset.
+Programatically, we use the function below to compute the valuation metrics for all perspectives at the start of pre-clinical.
 
-```{r, phase-based-summary2-tempppp, echo=FALSE}
-pos <- position_dodge(0.4)
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE' & metric %in% cum_metrics) %>%
-  group_by(from, metric) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(from, mu, color=metric, group=metric)) +
-  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
-  geom_line(position=pos, size=1, linetype='dotted') +
-  geom_point(position=pos, size=2) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  theme(legend.position = 'top')
-
-# TODO: Add linerange like in the plot above?
-phasely_final_valuation_long %>%
-  filter(intervention == 'NONE' & metric %in% cum_metrics) %>%
-  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
-  stat_summary(fun.y=mean, geom='line') +
-  stat_summary(fun.y=mean, geom='point') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  facet_wrap(. ~ metric) +
-  theme(legend.position = 'top',
-        axis.text.x = element_text(angle=90, hjust=1))
-```
-
-## Year-based summary
-Let us now look at some summary statistics of using the year-based method.
-
-```{r, year-based-wrangling, echo=FALSE}
-# Long
-yearly_valuation_long <- yearly_valuation %>%
-  select(src, intervention, subject, from, year, dev_prizes,
-         cashflow, ev, pv, epv,
-         cum, env, npv, enpv,
-         enpv_dir, enpv_ind) %>%
-  gather('metric', 'value', -src, -intervention, -subject, -from, -year, -dev_prizes) %>%
-  transform(metric = factor(metric, levels = c(metrics, cum_metrics, add_metrics)))
-
-# Final valuations
-yearly_final_valuation <- yearly_valuation %>%
-  group_by(src, intervention, subject, from, dev_prizes, dev_time, dev_prob) %>%
-  arrange(year) %>%
-  summarize(cum = tail(cum, n=1),
-            env = tail(env, n=1),
-            npv = tail(npv, n=1),
-            enpv = tail(enpv, n=1),
-            enpv_dir = tail(enpv_dir, n=1),
-            enpv_ind = tail(enpv_ind, n=1)) %>%
-  ungroup
-
-# Final long
-yearly_final_valuation_long <- yearly_valuation_long %>%
-  filter(metric %in% c(cum_metrics, add_metrics)) %>%
-  group_by(src, intervention, subject, from, metric, dev_prizes) %>%
-  arrange(year) %>%
-  summarize(value = tail(value, n=1)) %>%
-  ungroup
-```
-
-We begin with the value of taking the project from beginning (i.e. pre-clinical) to end (i.e. the final market year), using our cumulative valuation metrics.
-Again, note the usage of different scales across the different metrics due the vastly different values.
-
-```{r, year-based-summary, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-# TODO: Remove x-tick label
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% cum_metrics) %>%
-  ggplot(aes(metric, value/10^6, fill=src)) +
-  geom_boxplot() +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8)) +
-  facet_wrap(. ~ metric, scale='free', nrow=1) +
-  theme(legend.position = 'top')
-```
-
-When we've transformed the data to year-based we've moved from an ordinal to a ratio scale.
-As such it makes sense to explore how these valuations emerge as a consequence of the yearly cashflows of a project.
-From top-left to bottom-right: out-of-pocket cashflows, risk-adjusted/expected value (EV), capitalized/present value (PV), risk-adjusted/expected capitalized/present value (EPV).
-The middle line in each ribbon tracks the mean value, while the edges capture all values within 2 standard deviations of the mean (meaning 95% of the data).
-
-```{r, year-based-summary2, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-yearly_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% metrics) %>%
-  group_by(src, metric, year) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(year, mu)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
-                     label = unit_format(unit='', scale = 1e-6)) +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
-  geom_line(aes(color=src)) +
-  facet_wrap(. ~ metric, scale='free_y', ncol=2)
-```
-
-If we cumulate these values over time, we get the cumulative versions of these metrics.
-These can be thought of as the value of planning to run the project for x years, from the start.
-The x-axis consequently describes the planned "point of exit".
-From top-left to bottom right: cumulative out-of-pocket cashflows, cumulative risk-adjusted/expected value (EV), capitalized/net present value (NPV), and risk-adjusted/expected capitalized/net present value (ENPV).
-
-```{r, year-based-summary3, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
-yearly_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from == 'PC' & metric %in% cum_metrics) %>%
-  group_by(src, metric, year) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(year, mu)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 8),
-                     label = unit_format(unit='', scale = 1e-6)) +
-  xlab(element_blank()) +
-  ylab('USD (millions)') +
-  geom_ribbon(aes(x=year, ymin=(mu-std*2), ymax=(mu+std*2), fill=src), alpha=.4) +
-  geom_line(aes(color=src)) +
-  facet_wrap(. ~ metric, scale='free_y', ncol=2)
-```
-
-Again, we can look at how different starting phases alter the value of a project.
-The first plot depicts the mean value (across datasets) of bringing the project to completion from whatever starting phase we're currently considering.
-The vertical lines delimit +/- 1 standard deviations from the sample mean (i.e. ~68% of the data).
-The second plot depicts the mean of the same valuations but for each individual dataset.
-
-```{r, year-based-summary4, echo=FALSE}
-pos <- position_dodge(0.4)
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE' & metric %in% cum_metrics) %>%
-  group_by(from, metric) %>%
-  summarize(mu = mean(value),
-            std = sd(value)) %>%
-  ggplot(aes(from, mu, color=metric, group=metric)) +
-  geom_linerange(aes(ymin=mu-std, ymax=mu+std), position=pos, size=1) +
-  geom_line(position=pos, size=1, linetype='dotted') +
-  geom_point(position=pos, size=2) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  theme(legend.position = 'top')
-
-yearly_final_valuation_long %>%
-  filter(intervention == 'NONE' & metric %in% cum_metrics) %>%
-  ggplot(aes(from, value, color=src, group=interaction(src, metric))) +
-  stat_summary(fun.y=mean, geom='line') +
-  stat_summary(fun.y=mean, geom='point') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
-                     label = unit_format(unit = '', scale = 1e-9)
-                     ) +
-  xlab(element_blank()) + ylab('USD (billions)') +
-  facet_wrap(. ~ metric, scales='free') +
-  theme(legend.position = 'top',
-        axis.text.x = element_text(angle=90, hjust=1))
-```
-
-The table below summarizes the valuation metrics from the start of pre-clinical, in millions.
-
-```{r, year-based-table, echo=FALSE}
-sub <- yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  filter(from=='PC' & metric %in% cum_metrics) %>%
-  group_by(src, metric) %>%
-  summarize(mean  = mean(value) / 10^6,
-            median = median(value) / 10^6,
-            std = sd(value) / 10^6) %>%
-  arrange(metric)
-kable(sub)
-```
-
-
-## Comparing methods
-Let us now compare the two methods (phase-based and year-based) by looking at the cumulative valuations from different starting points.
-In the first two plots we observe that the simple valuation metrics cumulative cashflows and ENV, does not significantly differ between the two methods in any of the datasets.
-In fact, the cumulative metric should yield exactly the same results in both methods as neither discounting nor probability is taken into consideration.
-When computing ENV however, we take probability into account, and as a consequence, the outcome could in theory be different, but in practice, i.e. in the plot below, we observe that the difference is insignificant.
-
-```{r, combine-methods, echo=FALSE}
-pwise <- phasely_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  mutate(method = factor('phase', levels=c('phase', 'year')))
-ywise <- yearly_final_valuation_long %>%
-  filter(intervention == 'NONE') %>%
-  mutate(method = factor('year', levels=c('phase', 'year')))
-both <- bind_rows(pwise, ywise)
-```
-
-Taking discounting into consideration however, makes the two methods yield slightly different results.
-The following two plots illustrate that difference for the metrics NPV and ENPV.
-Again, in all datasets, from multiple starting phases.
-
-
-```{r, methods-comparison, echo=FALSE}
-for (curr in c('cum', 'env', 'npv', 'enpv')) {
-  p <- both %>%
-    filter(intervention == 'NONE') %>%
-    filter(metric == curr & from %in% c(DEVELOPMENT_PHASES, 'M1')) %>%
-    ungroup %>%
-    ggplot(aes(src, value / 10^6, color=method, fill=method)) +
-    geom_boxplot(alpha=0.3) +
-    facet_wrap(. ~ from, scales='free', ncol=6) +
-    ylab('USD (millions)') +
-    xlab(element_blank()) +
-    theme(axis.text.x = element_text(angle=90, hjust=1),
-          axis.text.y = element_text(angle=90),
-          legend.position = 'top') +
-    ggtitle(curr)
-  print(p)
+```{r, valuation-function}
+valuation <- function(df) {
+  df %>%
+    # Group by subject and intervention
+    group_by(subject, prize_phase) %>%
+    # Ensure order is correct before computing time to
+    arrange(prize_phase, subject, phase, phase_year) %>%
+    # Add absolute time (t) column
+    mutate(time_to = cumsum(time) - time) %>%
+    # Ensure order is based on time_to
+    arrange(time_to) %>%
+    # Valuation
+    mutate(# Helpers
+           inef_time = time + time * publ_inefficiency,
+           inef_cost = cost + cost * publ_inefficiency,
+           inef_time_to = cumsum(inef_time) - inef_time,
+           prob_to = cumprod(prob) / prob,
+           prize = ifelse(phase_year == 1 & phase == prize_phase, prize_size, 0),
+           # Cashflow
+           priv_cf       = sales - cost,
+           int_priv_cf   = sales - cost + prize,
+           ind_cf        = -prize,
+           dir_cf        = -cost,
+           inef_dir_cf   = -inef_cost,
+           # Expected value
+           priv_ev       = priv_cf     * prob_to,
+           int_priv_ev   = int_priv_cf * prob_to,
+           ind_ev        = ind_cf      * prob_to,
+           dir_ev        = dir_cf      * prob_to,
+           inef_dir_ev   = inef_dir_cf * prob_to,
+           # Private value
+           priv_pv       = priv_cf     / ((1 + priv_discount_rate) ^ time_to),
+           int_priv_pv   = int_priv_cf / ((1 + priv_discount_rate) ^ time_to),
+           ind_pv        = ind_cf      / ((1 + publ_discount_rate) ^ time_to),
+           dir_pv        = dir_cf      / ((1 + publ_discount_rate) ^ time_to),
+           inef_dir_pv   = inef_dir_cf / ((1 + publ_discount_rate) ^ time_to),
+           # Expected present value
+           priv_epv      = priv_pv * prob_to,
+           int_priv_epv  = int_priv_pv * prob_to,
+           ind_epv       = ind_pv * prob_to,
+           dir_epv       = dir_pv * prob_to,
+           inef_dir_epv  = inef_dir_pv * prob_to,
+           # Cumulative cashflow
+           priv_ccf      = cumsum(priv_cf),
+           int_priv_ccf  = cumsum(int_priv_cf),
+           ind_ccf       = cumsum(ind_cf),
+           dir_ccf       = cumsum(dir_cf),
+           inef_dir_ccf  = cumsum(inef_dir_cf),
+           # Expected net value
+           priv_env      = cumsum(priv_ev),
+           int_priv_env  = cumsum(int_priv_ev),
+           ind_env       = cumsum(ind_ev),
+           dir_env       = cumsum(dir_ev),
+           inef_dir_env  = cumsum(inef_dir_ev),
+           # Net present value
+           priv_npv      = cumsum(priv_pv),
+           int_priv_npv  = cumsum(int_priv_pv),
+           ind_npv       = cumsum(ind_pv),
+           dir_npv       = cumsum(dir_pv),
+           inef_dir_npv  = cumsum(inef_dir_pv),
+           # Expected net present value
+           priv_enpv     = cumsum(priv_epv),
+           int_priv_enpv = cumsum(int_priv_epv),
+           ind_enpv      = cumsum(ind_epv),
+           dir_enpv      = cumsum(dir_epv),
+           inef_dir_enpv = cumsum(inef_dir_epv),
+           ) %>%
+    # Ungroup to avoid surprises when using result
+    ungroup
 }
 ```
 
-Evidently, there are no differences between the methods in the non-discounted valuation metrics.
-Interestingly however, the difference also seems comparatively small in the discounted metrics, but the yearly method does indeed yield slightly higher values.
-The difference between the two methods is more pronounced the earlier your venture point of valuation since the effect of discounting has more time to accumulate.
 
-Finally, let us compare the mean ENPV (starting from pre-clinical) of the Sertkaya data using both methods to the mean ENPV reported for the same indications in Table 13 of Sertkaya et. al (2014).
-Seeing that we've attempted to reflect their assumptions as closely as possible, the resulting ENPV should not be too far apart.
+## Applying valuation
+Before we can apply the valuation function we need to:
 
-```{r, sertkaya-enpv-paper-comparison, echo=FALSE}
-expected <-
-  data.frame(src = INDICATIONS,
-             original = c(-2.7 * 10^6,
-                          27.1 * 10^6,
-                          37.4 * 10^6,
-                          8.9  * 10^6,
-                          21.9 * 10^6,
-                          -4.5 * 10^6))
+1. Merge the additional information dataset with the base dataset that we converted to a yearly format.
+2. Replicate the full dataset once per treatment type, i.e. once per intervention target phase.
 
-actual_phasely <- phasely_final_valuation %>%
-  filter(intervention == 'NONE' & from == 'PC') %>%
-  group_by(src) %>%
-  summarize(phasely = mean(enpv))
-
-actual_yearly <- yearly_final_valuation %>%
-  filter(intervention == 'NONE' & from == 'PC') %>%
-  group_by(src) %>%
-  summarize(yearly = mean(enpv))
-
-actual <- merge(actual_yearly, actual_phasely, by='src')
-comparison <- merge(expected, actual, by='src', all.x=TRUE) %>%
-  # Convert to millions
-  mutate(original = original / 10^6,
-         phasely  = phasely / 10^6,
-         yearly   = yearly / 10^6) %>%
-  # Prettier names
-  rename('Sertkaya et. al (2014)' = original)
-
-# Print table in millions
-comparison %>%
-  mutate(yearly = round(yearly, 1),
-         phasely = round(phasely, 1)) %>%
-  kable(caption = 'Mean ENPV comparison (million USD, rounded)')
-
-# Plot comparison
-comparison %>%
-  gather(method, value, -src) %>%
-  # Control printing order
-  ggplot(aes(src, value, fill=method)) +
-  geom_bar(stat='identity', position=position_dodge()) +
-  facet_wrap(. ~ src, scale='free_x', nrow=1) +
-  ylab('Mean ENPV (million usd)') +
-  xlab(element_blank()) +
-  theme(legend.position = 'top',
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank())
+```{r, merge-yearly-and-additional}
+valuable <- years %>%
+  # Merge with additional information
+  merge(., additional, by='subject') %>%
+  # Cartesian merge with target phases distribution
+  merge(., intervention_phase_dist)
 ```
 
+We then apply our valuation function.
 
+```{r, valuation}
+valued <- valuation(valuable)
+```
+
+Since we are mostly interested in the value of bringing a project from start to finish, we will prepare a subset of the `valued` dataset that only contain the last "timestep" of every project.
+When only looking at the final value we are only interested in the cumulative valuation metrics and therefore also filter out all CF, PV, EV, and EPV columns.
+Further we also remove all timestep specific information.
+
+```{r, finals}
+finals <- valued %>%
+  filter(src != 'DRIVE-AB (2018)') %>% # TODO: Remove the DRIVE-AB dataset completely instead.
+  group_by(subject, prize_phase) %>%
+  filter(time_to == max(time_to)) %>%
+  select(-matches('_cf$|_pv$|_ev$|_epv$')) %>%
+  select(-phase_year,
+         -phase,
+         -time,
+         -inef_time,
+         -cost,
+         -inef_cost,
+         -sales,
+         -prob,
+         -prize) %>%
+  ungroup
+```
 
 
 # Analysis
-To prepare for "within-subject" analysis we first select all valuation columns and then match every intervention (including the control group, i.e. no intervention) with every intervention.
-Then we remove "duplicated" rows, which appear since every intervention (e.g. P1ER) will not only be matched with every other intervention but also with itself, as these are irrelevant for analysis.
+TODO: Re-add summary statistics here.
 
-```{r, comparable-years}
-finals <- yearly_final_valuation %>%
-  # Only consider valuations from first phase
-  filter(from == 'PC') %>%
-  # Only keep identifying, characteristics, and valuation columns
-  select(src, intervention, subject, dev_prizes, dev_prob, dev_time,
-         cum, env, npv, enpv, enpv_ind, enpv_dir) %>%
-  # Make cartesian product to allow comparing valuations between interventions
-  # within subject. NOTE: Merging by more cols than just subject to avoid
-  # duplicating cols.  E.g. src would be duplicated into src.x and src.y.
-  merge(., ., by=c('src', 'subject', 'dev_prob', 'dev_time')) %>%
-  # Remove duplicates since comparing to itself makes no sense
-  filter(intervention.x != intervention.y)
-```
+## Private ENPV
 
+Private ENPV clearly increase as prize sizes increase, regardless of intervention phase.
 
-## Indirect: effectiveness
-Determining the efficiency of an intervention means that we must take both its effectivess and its cost into consideration.
-We will measure effectiveness as the likelihood that a given intervention turns a pre-clinical no-decision into a go-decision (on the basis of private ENPV), and we will measure cost as the previously computed indirect ENPV.
-
-Before we proceed further however, let us first ensure that the issued prizes (i.e. the interventions) actually do have an effect on private ENPV.
-As such there should be a correlation between prize size, regardless of intervention phase, and the improvement in private ENPV in all datasets.
-By subtracting the private ENPV value before the application of the intervention from the private ENPV after the application of the intervention we get the improvement in private ENPV, i.e. the delta.
-Since we're modeling non-dilutive prizes with no strings attached, the intervention will always improve private ENPV which means that the delta as a consequence always will be greater than zero.
-
-```{r, prize-vs-private-enpv, echo=FALSE}
-print(finals %>%
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
+```{r, private-enpv-improvement, echo=FALSE}
+finals %>%
+  ggplot(aes(prize_size, int_priv_enpv - priv_enpv, col=prize_phase)) +
   geom_point(alpha=1, shape=1) +
-  #geom_smooth(method='lm', se=FALSE, col='black') +
-  facet_wrap(intervention.y ~ src, ncol=7, scale='free') +
+  facet_wrap(prize_phase ~ src, ncol=6, scale='free') +
   xlab('Prize') +
-  ylab('Private ENPV') +
-  #scale_x_continuous(label = unit_format(scale=1e-9, unit=''),
-  #                   breaks = pretty_breaks(8)) +
-  #scale_y_continuous(label = unit_format(scale=1e-6, unit='')) +
+  ylab('Private ENPV improvement') +
   theme(legend.position = 'top',
         axis.text.x = element_blank(),
         axis.text.y = element_blank(),
@@ -1437,54 +967,15 @@ print(finals %>%
         axis.ticks.y = element_blank(),
         panel.spacing = unit(0, 'cm'),
         strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
-        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm'))
-  )
-)
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
 ```
 
-In the plots above, the data does not seem correlated.
-If we however plot the same data on a log-log scale (see below) the correlation is evident.
-As a side-note it is important to remember that the reason that there are very few samples at high x-values in the first set of plots is that we sampled intervention prize sizes logarithmically.
-In the first set of plots the data *is* in fact correlated but the variance increases with x.
+When plotting different phase prizes side by side we observe a "layering" where later phases are more costly than earlier ones.
+Heteroscedasticity is fixed by plotting log-log.
 
-```{r, prize-vs-private-enpv-improvement, echo=FALSE}
-print(finals %>%
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, col=intervention.y)) +
-  geom_point(alpha=1, shape=1) +
-  #geom_smooth(method='lm', se=FALSE) +
-  facet_wrap(intervention.y ~ src, ncol=7, scale='free') +
-  xlab('Prize (log)') +
-  ylab('Private ENPV (log)') +
-  scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = NULL,
-                     labels = trans_format('log10', math_format(10^.x))) +
-  scale_y_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = NULL,
-                     labels = trans_format('log10', math_format(10^.x))) +
-  theme(legend.position = 'top',
-        axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.spacing = unit(0, 'cm'),
-        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
-        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm'))
-  )
-)
-```
-
-Other studies have shown, that the later a prize is awarded, the higher the size of the prize must be to achieve a comparative increase in ENPV.
-This phenomena is clearly visible in our model when plotting the correlation between prize size and private ENPV improvement for all interventions on the same scale.
-The data organizes itself into "layers", where for any given prize size, the resulting ENPV is higher for late stage interventions and lower for early stage interventions.
-
-```{r, prize-vs-private-enpv-improvement2, echo=FALSE, warning=FALSE}
-# TODO: This plot yields warnings!
-print(finals %>%
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, enpv.y - enpv.x, color=intervention.y)) +
+```{r, layers, echo=FALSE}
+finals %>%
+  ggplot(aes(prize_size, int_priv_enpv - priv_enpv, color=prize_phase)) +
   geom_smooth(method='lm', se=FALSE) +
   geom_point(shape=1) +
   xlab('Prize') +
@@ -1497,325 +988,747 @@ print(finals %>%
                      breaks = c(1 %o% 10^(0:10)),
                      minor_breaks = c(1:9 %o% 10^(0:10)),
                      labels = trans_format('log10', math_format(10^.x))) +
-  facet_wrap(. ~ src, ncol=4, 'free') +
+  facet_wrap(. ~ src) +
   theme(legend.position = 'top')
-)
 ```
 
-Let us now move to estimating the interventions' improvement on pre-clinical go-decisions.
-We assume that a pre-clinical go-decision will be reached if ENPV upon entering pre-clinical is at or above zero, and a no-decision reached if not.
 
-If we jitter plot prize size on the x-axis and the binary go-decision on the y-axis, we (expectedly) observe that as prizes increase, initial no-decisions are eventually turned into go-decisions.
-If we look closely we even see that the range of prizes that turns no's into go's seems to be higher in later phases and lower in earlier.
-This is of course also expected since we've already established that late-phase prizes must be higher to achieve an ENPV improvement comparable to early-phase prizes.
 
-```{r, prize-vs-go-decision, echo=FALSE}
+## Probability of go
+
+By dividing the number of go-decisions under some given range of parameters with the number of projects under that same parameter range we reach the ratio of go/no-decisions.
+We will refer to this as P(go) since it also describes the probability of a project reaching a go-decision.
+We assume that go-decisions are reached when Private ENPV ≥ 0 or Intervened Private ENPV ≥ 0, before and after interventions respectively.
+
+### Base probability
+Without considering interventions.
+
+```{r, distribution-of-go, echo=FALSE}
+tmp <- finals %>%
+  group_by(src) %>%
+  summarize(go = sum(ifelse(priv_enpv >= 0, 1, 0)) / n(),
+            no = sum(ifelse(priv_enpv >= 0, 0, 1)) / n()) %>%
+  mutate(src = fct_reorder(src, -go)) %>%
+  gather('go', 'percentage', -src) %>%
+  ungroup
+
+tmp %>%
+  arrange(go) %>%
+  mutate(go = go == 'go',
+         percentage = percentage * 100) %>%
+  ggplot(aes(src, percentage, fill=go)) +
+  geom_col() +
+  geom_text(aes(label=round(percentage, 0)),
+                position=position_stack(vjust=0.5)) +
+  ylab('%') +
+  xlab(element_blank()) +
+  labs(fill=element_blank()) +
+  scale_y_continuous(breaks = pretty_breaks(n=10))
+
+tmp %>%
+  mutate(percentage = percentage * 100) %>%
+  spread(go, percentage) %>%
+  kable(digits=0, caption='Percentage go/no-go without interventions')
+```
+
+
+### Predict probability of go
+Using logistic regression we can predict P(go) from intervention prize size.
+
+Jitter plotting prize size and go-decisions suggests that logistic regression is a reasonable approach to the problem at hand.
+
+```{r, prize-vs-no-to-go, echo=FALSE}
 finals %>%
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, enpv.y >= 0, color=intervention.y)) +
+  filter(priv_enpv < 0) %>%
+  ggplot(aes(prize_size, int_priv_enpv >= 0)) +
   geom_jitter(shape=1) +
-  facet_grid(cols=vars(src), rows=vars(intervention.y)) +
+  facet_grid(cols=vars(src), rows=vars(prize_phase)) +
+  ylab('Go\n(Intervened Private ENPV ≥ 0)') +
+  xlab('Prize size') +
+  ggtitle('Private ENPV < 0') +
   theme(legend.position = 'none') +
-  ylab('Pre-clinical go-decision') +
-  xlab('Prize') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(seq(0,10,2))),
                      labels = trans_format('log10', math_format(10^.x)))
 ```
 
-The analysis above is however also diffused by the fact that we are not differentiating between turning a no-decision into a go-decision and simply paying money to a project that already faced a go-decision.
-Let us focus on projects that faced an initial no-decision.
+Build model.
 
-Running the same plot on the new subset we get a clearer picture of when no's actually are turned into go's.
+```{r, hjlfksjdhf}
+go_model <- function(df)
+  glm(int_priv_enpv >= 0 ~ prize_size,
+      data = df %>% filter(priv_enpv < 0),
+      family = binomial(link='logit'))
 
-```{r, prize-vs-go-decision-in-nos, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE' & enpv.x < 0) %>%
-  ggplot(aes(dev_prizes.y, enpv.y >= 0, color=intervention.y)) +
-  geom_jitter(shape=1) +
-  facet_grid(cols=vars(src), rows=vars(intervention.y)) +
-  theme(legend.position = 'none') +
-  ylab('Pre-clinical go-decision') +
-  xlab('Prize') +
+predict_response <- function(fit, df)
+  predict(fit, newdata=df, type='response')
+```
+
+We run the model once per combination of prize phase and source to avoid having to model interaction effects.
+
+```{r, lshfjksdf}
+go_models <- finals %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(go_fit = map(data, go_model),
+         pred_go = map2(go_fit, data, predict_response),
+         tidied = map(go_fit, tidy)) %>%
+  ungroup
+
+# NOTE: Using legacy unnest because:
+# https://github.com/tidyverse/tidyr/issues/694
+
+tidied <- go_models %>%
+  unnest_legacy(tidied)
+```
+
+```{r, kjhlsdfsd, echo=FALSE}
+go_models %>%
+  unnest(data, pred_go) %>%
+  ggplot(aes(prize_size, pred_go, color=prize_phase)) +
+  geom_line() +
+  facet_wrap(. ~ src) +
+  ylab('P(go)') +
+  xlab('Prize size') +
+  theme(legend.position = 'top') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(seq(0,10,2))),
                      labels = trans_format('log10', math_format(10^.x)))
 ```
 
-To more properly understand at what ranges the different interventions have their effects we can build a logistic regression model where prize size predicts no/go and then use that model to predict the probability of a particular prize yielding a go- as opposed to a no-decision.
-We will refer to the predicted percentage of go-decisions under a given prize as the predicted go-rate of a prize or an intervention.
+All p-values are significant.
 
-```{r, predict-go-in-nos}
-# Only no-decisions in control group before treatment
-nos <- finals %>% filter(enpv.x < 0 &
-                         intervention.x == 'NONE')
-
-go_model <- glm(
-  (enpv.y >= 0) ~ dev_prizes.y * interaction(src, intervention.y),
-  data = nos,
-  family = binomial(link='logit'))
-
-nos$pred.go.y <- predict(go_model, type='response')
+```{r, skjldhfsdf, echo=FALSE}
+digits = 4
+tidied %>%
+  select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value) %>%
+  kable(digits=4,
+        caption=sprintf('P-values (rounded to %s decimals, i.e. p < %s if 0)',
+                        digits,
+                        10^-digits))
 ```
 
-With this we can reason about the average size at which a given intervention actually has an effect.
-More precisely we can reason about the probability of a particular prize size turning a no-decision into a go-decision.
-In the following plot we clearly see how late-phase prizes must be substantially higher to have the same probability of turning no-decisions into go-decisions as early-phase prizes.
 
-```{r, prize-vs-predicted-go-in-nos, echo=FALSE}
-nos %>%
-  ggplot(aes(dev_prizes.y, pred.go.y*100, color=intervention.y)) +
+### Predict prize size
+To "reverse" the model and predict prize from some given probability we use the following function.
+
+$$
+f(y) =
+\frac{
+  ln(\frac{y}{1-y}) - \beta_0
+}{
+  \beta_1
+}
+$$
+
+Which we encode as follows.
+
+```{r, skhjflsdkf}
+predict_prize_from_prob <- function(tidied, y) {
+  b0 <- filter(tidied, term=='(Intercept)')$estimate
+  b1 <- filter(tidied, term=='prize_size')$estimate
+  (log(y / (1-y)) - b0) / b1
+}
+```
+
+We can sanity check the output of the function by predicting prize size from predicted P(go) and check if it is correlated with the actual prize size that P(go) was predicted from.
+
+```{r, lkhjgdfg, echo=FALSE}
+tmp <- go_models %>%
+  mutate(pred_prize_size = map2(tidied, pred_go, predict_prize_from_prob)) %>%
+  unnest_legacy(pred_prize_size, pred_go, data)
+```
+
+```{r, ashjldfsdj, echo=FALSE}
+max_prob <- 0.99999
+tmp %>%
+  filter(pred_go < max_prob) %>%
+  ggplot(aes(prize_size, pred_prize_size)) +
   geom_line() +
+  facet_wrap(prize_phase ~ src, scale='free') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      labels = trans_format('log10', math_format(10^.x))) +
-  xlab('Prize') +
-  ylab('Probability of no-to-go (%)') +
-  facet_wrap(. ~ src)
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize size') +
+  ylab('Predicted prize size') +
+  theme(legend.position = 'none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm'))) +
+  ggtitle(sprintf('where P(go) < %s', max_prob))
 ```
 
-When previously filtering out projects that already faced go-decisions we notice that a plethora of projects already faced go-decisions even without intervention.
-Many (the author included) have suggested that prizes should be coupled with profitability analyses in order to avoid wasteful spending of public resources.
-However, such a filtering process is likely to be prohibitively difficult in reality.
-And even if conducted, the incentive for developers to "rig" the numbers and bend the truth is substantial.
-Granting prizes to developers with projects that would have been pursued regardless of the existance of the prize is consequently assumed to be an unfortunate but possibly unavoidable reality.
+Note that (not evident in the plot above is that) predicted prize size becomes a constant as y reaches 100%.
+Therefore significant differences between predicted and actual prize appear and grow when approximating P(go) = 1 since we have sampled prizes much larger than prizes required to yield 100% go but when predicting required prize sizes to achieve 100% go will always yield the same prize size.
 
-Under this assumption we cannot employ the "cleaner" no-to-go model but must use all the data and use prize size to predict go-decisions in the existance of the noise caused by projects facing go-decisions irrespectively.
-I.e. under the assumption that we cannot a priori distinguish between a sufficiently profitable project and one in need of an intervention we will assume that interventions are promised to all.
-
-```{r, predict-go}
-mod <- glm(
-  (enpv.y >= 0) ~ dev_prizes.y * interaction(src, intervention.x, intervention.y),
-  data = finals,
-  family = binomial(link='logit'))
-
-finals$pred.go.y <- predict(mod, type='response')
-```
-
-```{r, prize-vs-predicted-go, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, pred.go.y*100, color=intervention.y)) +
-  geom_line() +
+```{r, kjsdfhlksjdf, echo=FALSE}
+tmp %>%
+  filter(pred_go < max_prob) %>%
+  mutate(diff = prize_size - pred_prize_size) %>%
+  ggplot(aes(pred_go*100, diff)) +
+  geom_point(shape=1) +
+  facet_wrap(. ~ prize_phase, nrow=1) +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      labels = trans_format('log10', math_format(10^.x))) +
-  xlab('Prize') +
-  ylab('Probability of pre-clinical go-decision (%)') +
-  facet_wrap(. ~ src)
+  scale_y_continuous(breaks=pretty_breaks(n=20)) +
+  theme(axis.text.x = element_text(angle=90, hjust=1)) +
+  ggtitle(sprintf('where P(go) < %s', max_prob))
+```
+
+```{r, sdlfhsdklfhsd, echo=FALSE}
+tmp %>%
+  ggplot(aes(prize_size, pred_go*100, group=prize_phase)) +
+  geom_line(color='black', size=2) +
+  geom_line(aes(x = pred_prize_size,
+                y = pred_go*100),
+            color = 'white',
+            size = 0.7) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  xlab('Prize size') +
+  ylab('P(go)') +
+  facet_wrap(.~src) +
+  coord_cartesian(xlim = c(10^6.7, 10^10)) +
+  ggtitle(sprintf('Sanity checking of reverse prediction\n(white = predict x from predicted y)\nwhere P(go) < %s', max_prob)) +
+  theme(legend.position = 'bottom')
 ```
 
 
-## Indirect: cost
-We will now explore the correlation between prize size and indirect ENPV.
-I.e. the correlation between the size of the prize in an indirect funding scheme and the cost of that scheme for the benefactor.
-Note that indirect ENPV necessarily will be negative as the cost of paying the final prize is the only cashflow considered.
-When plotting indirect ENPV however we present it as a positive number (i.e. as a cost) instead of a negative number (i.e. as a cashflow).
+### Effective prize sizes
+Using our function that solves for prize size from a given probability of go we can predict what prize sizes are required to achive a target probability of go of `r target=0.95; target*100`% in each of the sources?
 
-```{r, prize-vs-indirect-enpv-including-nos, echo=FALSE}
+```{r, klhjsdfkdf}
+effectives <- tidied %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(pred_prize_size = map2_dbl(data, target, predict_prize_from_prob)) %>%
+  select(-data) %>%
+  ungroup
+```
+
+```{r, alslflhjsdfkjhs, echo=FALSE}
+effectives %>%
+  ggplot(aes(src, pred_prize_size/10^6, fill=src)) +
+  geom_col(position='dodge') +
+  facet_wrap(. ~ prize_phase, nrow=1, scale='free_x') +
+  scale_y_continuous(breaks = pretty_breaks(n = 20)) +
+  ylab('Prize size\n(million usd)') +
+  xlab(element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        legend.position = 'none') +
+  ggtitle(sprintf('P(go) = %s%%', target*100))
+```
+
+If prizes are not targeted by indication we must choose the highest prize to ensure a minimum of `r target*100`% go-decisions for all indications.
+Hence the "max" row.
+
+```{r, hjklfsdf, echo=FALSE}
+effectives %>%
+  group_by(prize_phase) %>%
+  mutate(src = '(max)') %>%
+  summarize(pred_prize_size = max(pred_prize_size),
+            src = '(max)') %>%
+  rbind(effectives, .) %>%
+  mutate(pred_prize_size = round(pred_prize_size / 10^6)) %>%
+  spread(prize_phase, pred_prize_size) %>%
+  kable(caption=sprintf('Million usd (rounded). P(go) = %s%%.', target*100))
+```
+
+
+
+## Indirect ENPV
+The cost of issuing an intervention depends on both prize size and prize phase.
+When computing the cost of an intervention we only include projects that actually reach go-decisions after (even if go was reached before) the introduction of the intervention since the benefactor will only ever (possibly) pay for projects that are actually undertaken.
+
+```{r, prize-vs-indirect-enpv-excluding-nos, echo=FALSE}
 finals %>%
-  #ggplot(aes(prizes / 10^6, -enpv_ind / 10^6, color=intervention)) +
-  filter(intervention.x == 'NONE') %>%
-  ggplot(aes(dev_prizes.y, -enpv_ind.y, color=intervention.y)) +
+  filter(int_priv_enpv >= 0) %>%
+  ggplot(aes(prize_size, -ind_enpv, color=prize_phase)) +
   geom_point(shape=1) +
   geom_smooth(method='lm', se=FALSE) +
-  facet_wrap(. ~ src, ncol=4) +
+  facet_wrap(. ~ src) +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      minor_breaks = c(1:9 %o% 10^(0:10)),
-                     #label = unit_format(unit = '')) +
                      labels = trans_format('log10', math_format(10^.x))) +
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      minor_breaks = c(1:9 %o% 10^(0:10)),
-                     #label = unit_format(unit = '')) +
                      labels = trans_format('log10', math_format(10^.x))) +
-  xlab('Prize') +
-  ylab('Indirect ENPV (both go\'s and no\'s)') +
-  theme(legend.position = 'top')
-```
-
-However, since not all projects will reach a go-decision, we cannot compute the total indirect cost as simply the expected cost of the intervention given the project's probabilities, but must instead compute the expected cost of the intervention given the project's probabilities and the owner's decision of whether to pursuit it or not.
-In other words:
-
-> An intervention will not have to fund projects ran by owners that (despite the existance of the intervention) choose to terminate their projects and consequently never reach the prize point.
-
-In even other words, we assume that the final go-/no-decision of a project is based on whether private ENPV is zero or above.
-When computing indirect ENPV however, we must only consider cashflows that private developers have *chosen* to undertake.
-In other words, **indirect ENPV is *path dependent* on private ENPV**.
-Importantly, private ENPV here refers to the valuation *after* the introduction of the intervention.
-In summary, to compute the cost of indirect funding we must first determine which projects would reach go-decisions (and hence probabilitistically need to be funded) under said funding scheme (intervention).
-
-Again, assuming that a pre-clinical go-decision is reached if ENPV after the introduction of the intervention is greater than or equal to 0, we can filter and keep only observations where we've reached a go-decision in pre-clinical and plot again.
-
-Analyzing the new plot we realize that while paying for substantially fewer projects when issuing lower prizes, we still observe the same "stacking" of interventions as we did before removing non-go projects.
-
-```{r, prize-vs-indirect-enpv, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE' & enpv.y >= 0) %>%
-  ggplot(aes(dev_prizes.y, -enpv_ind.y, color=intervention.y)) +
-  geom_point(shape=1) +
-  geom_smooth(method='lm', se=FALSE) +
-  facet_wrap(. ~ src, ncol=4) +
-  scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = c(1:9 %o% 10^(0:10)),
-                     labels = trans_format('log10', math_format(10^.x))) +
-  scale_y_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = c(1:9 %o% 10^(0:10)),
-                     labels = trans_format('log10', math_format(10^.x))) +
-  xlab('Prize') +
+  xlab('Prize size') +
   ylab('Indirect ENPV') +
-  theme(legend.position = 'top')
+  ggtitle('Intervened Private ENPV ≥ 0') +
+  theme(legend.position = 'bottom')
 ```
 
-
-In summary, we've already established that later interventions must be larger to achieve a private ENPV improvement comparable to earlier interventions.
-However, for any given prize size in the plot above, the indirect ENPV (i.e. the cost of that prize for the benefactor) is higher the earlier the intervention is provided.
-In summary, for a given prize size, paying early maximizes effect but also unfortunately maximizes benefactor cost.
-
-This analysis is however too simplistic since it ignores that a late phase prize appear cheaper due to fewer go-decisions as a consequence of poorer private ENPV.
-<!--However, if we disregard private ENPV improvement differences, then later interventions are cheaper for the benefactor than earlier ones of the same size.-->
-Such a simplification is unfortunately unacceptable as the purpose of an indirect intervention is to improve private ENPV to a point where sufficiently many no-decisions are turned into go-decisions.
-We must therefore correct for the fact that private ENPV, go-decisions, and indirect ENPV co-vary.
-
-Focusing on only indirect interventions and ignoring direct interventions for a moment, the question is therefore:
-Given some target private ENPV improvement, which indirect intervention phase has the lowest indirect ENPV?
-Alternatively:
-
-> Which indirect intervention phase has the lowest indirect ENPV, while controlling for private ENPV improvement?
-
-One naive way of avoiding to control for private ENPV improvement is to "flip" the analysis and look at cost per expected output rather than the cost per expected input.
-We compute indirect ENPV per output as indirect ENPV (per input) divided by the (technical) probability of reaching market.
-
-```{r, prize-vs-indirect-enpv-in-postgos, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE' & enpv.y >= 0) %>%
-  mutate(enpv_ind_per_exit.y = enpv_ind.y/dev_prob) %>%
-  ggplot(aes(dev_prizes.y, -enpv_ind_per_exit.y, color=intervention.y)) +
-  geom_smooth(method='lm', se=FALSE) +
-  # TODO: Reintroduce smooth when we have more data again!
-  geom_point(shape=1) +
-  facet_wrap(. ~ src, ncol=4) +
-  scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = c(1:9 %o% 10^(0:10)),
-                     #label = unit_format(unit = '')) +
-                     labels = trans_format('log10', math_format(10^.x))) +
-  scale_y_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(0:10)),
-                     minor_breaks = c(1:9 %o% 10^(0:10)),
-                     #label = unit_format(unit = '')) +
-                     labels = trans_format('log10', math_format(10^.x))) +
-  xlab('Prize') +
-  ylab('Indirect ENPV per exit') +
-  theme(legend.position = 'top')
-```
-
-The problem with this analysis is that when looking at the data per-output, we're not taking the go-rate into consideration.
-
-> A sample of projects reaching go-decisions at some low prize is systematically different from one of projects reaching go-decisions under a high prize.
-
-Read as a "comparison prize", we might therefore conclude that low prizes are efficient (i.e. low cost per output) while high prizes are inefficient (i.e. high cost per output).
-This conclusion is evidently however erroneous as brief projects with low cost and low risk require lower prizes for developers to reach a go-decision, while long projects with high cost and high risk require huge prizes for developers to reach a go-decision.
-
-We have therefore only replaced our need to control for private ENPV improvement with the new need to control for go-rate.
-In conclusion we must control for either private ENPV improvement (when analyzing indirect ENPV per entry/input) or for go-rate (when analyzing indirect ENPV per exit/output).
-<!--Private ENPV and go-rate should be perfectly correlated.-->
-
-
-## Indirect: efficiency
-To estimate an intervention's efficiency we must consider both its effectiveness and its cost.
-More specifically we must compute its cost per unit of effect.
-We will measure cost as indirect ENPV, and effectiveness as either private ENPV improvement or go-rate.
-
-As previously argued, we will not remove projects that would reach go-decisions irrespectively of the existance of an intervention, as ignoring them would bias the data.
-<!--Instead of filtering out the no-go projects and looking at the cost per go-decision, we will -->
-
-We will only look at go-rates lower than `r go_lim_up = 0.99; go_lim_up*100`%.
+We will only look at go-rates lower than `r go_lim_up=0.99; go_lim_up*100`%.
 Since a go-rate higher than 100% is not achievable, any prize size larger than the lowest size that yields a go-rate of 100% will also merely yield 100%.
 
-```{r, go-rate-vs-indirect-enpv, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE' & pred.go.y < go_lim_up) %>%
-  ggplot(aes(pred.go.y*100, ifelse(enpv.y >= 0, -enpv_ind.y, 0), color=intervention.y)) +
-  geom_point(shape=1) +
-  geom_smooth(method='loess', se=FALSE, color='black') +
-  xlab('Probability of go-decision (%) under prize size') +
-  ylab('Indirect ENPV per entry\n(million usd)') +
-  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
-  theme(legend.position='none') +
-  facet_grid(cols=vars(intervention.y), rows=vars(src))
-
-finals %>%
-  filter(pred.go.y < go_lim_up) %>%
-  filter(enpv.y >= 0) %>%
-  ggplot(aes(pred.go.y*100, ifelse(enpv.y >= 0, -enpv_ind.y, 0), color=intervention.y)) +
-  geom_point(shape=1) +
-  geom_smooth(method='loess', se=FALSE, color='black') +
-  xlab('Probability of go-decision (%) under prize size') +
-  ylab('Indirect ENPV per go-decision\n(million usd)') +
-  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
-  theme(legend.position='none') +
-  facet_grid(cols=vars(intervention.y), rows=vars(src))
+```{r, shkldflkjshsf, echo=FALSE}
+for (curr in unique(go_models$prize_phase)) {
+  p <- go_models %>%
+    filter(prize_phase == curr) %>%
+    unnest_legacy(data, pred_go) %>%
+    filter(pred_go < go_lim_up) %>%
+    filter(int_priv_enpv >= 0) %>%
+    ggplot(aes(pred_go*100, -ind_enpv)) +
+    geom_point(shape=1) +
+    geom_smooth(method='loess', se=FALSE, color='red') +
+    xlab('P(go)') +
+    ylab('Indirect ENPV per entry\n(million usd)') +
+    scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+    scale_x_continuous(breaks = pretty_breaks(n=10)) +
+    facet_wrap(. ~ src, scale='free') +
+    ggtitle(sprintf('Intervened Private ENPV ≥ 0    Prize phase = %s    P(go) < %s', curr, go_lim_up)) +
+    theme(legend.position = 'bottom')
+  print(p)
+}
 ```
 
-Using local regression (loess) we can see that the interventions again seem to "stack".
-This analysis therefore suggests that paying later isn't just more expensive in terms of the "promised prize size", but remains more expensive even when you take attrition rates (i.e. projects terminated for financial or scientific reasons) into account.
+When smoothing the curves, phase wise "layering" again become obvious.
 
 ```{r, go-rate-vs-indirect-enpv-smooth, echo=FALSE}
-a <- data.frame(finals) %>%
-  filter(pred.go.y < go_lim_up) %>%
-  filter(enpv.y >= 0) %>%
-  mutate(per = 'per PC go-decision')
-
-b <- data.frame(finals) %>%
-  filter(pred.go.y < go_lim_up) %>%
-  mutate(per = 'per PC entry',
-         enpv_ind.y = ifelse(enpv.y >= 0, enpv_ind.y, 0))
-
-rbind(a, b) %>%
-  ggplot(aes(pred.go.y*100, -enpv_ind.y, color=intervention.y, linetype=per, shape=per)) +
-  #geom_point() +
+go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  filter(pred_go < go_lim_up) %>%
+  filter(int_priv_enpv >= 0) %>%
+  ggplot(aes(pred_go*100, -ind_enpv, color=prize_phase)) +
   geom_smooth(method='loess', se=FALSE) +
   scale_linetype_manual(values=c('dotted', 'solid')) +
-  facet_wrap(. ~ src, scales='free', nrow=2) +
-  xlab('Probability of go-decision (%) under prize size') +
-  ylab('Indirect ENPV (million usd)') +
+  facet_wrap(. ~ src, scales='free') +
+  xlab('P(go)') +
+  ylab('Indirect ENPV\n(million usd)') +
+  ggtitle('Intervened Private ENPV ≥ 0  (per go-decision)') +
   scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
-  theme(legend.position = 'top', legend.title = element_blank())
+  theme(legend.position = 'bottom', legend.title = element_blank())
 ```
 
-To tackle the question of whether paying directly or indirectly is preferable, we must compare the above indirect ENPVs to the direct ENPV of simply paying for the project at-cost.
-Above, we have however computed the expected cost per pre-clinical entry.
-While a perfectly valid statistic it cannot sensibly be compared against the expected cost of direct funding since the output, i.e. the probability of any given entry becoming an exit, actually varies.
-
-When directly funding antibiotics, projects may be terminated at the discretion of the benefactor, but when indirectly funding they may be terminated at the discretion of the project owner.
-So to make an "apples to apples" comparison of indirect and direct we would only be able to compare indirect prize sizes that yield go-rates of approximately 100%.
-Only then would every input project into pre-clinical stand an equivalent chance of making it through to the market regardless of whether directly or indirectly funded, and only then could we compare the prize per entry.
-
-Given that we however want to explore various go-rates we will hereon move from computing the expected cost per entry to computing the expected cost per exit.
-Specifically, the expected, capitalized cost per market approval.
-In other words, while we have analyzed the cost per unit of input, we will now move to analyzing the cost per unit of output.
+The layering remains, even when dividing the indirect ENPV of each project by the probability that it reaches the market.
 
 ```{r, go-rate-vs-exit, echo=FALSE}
-finals %>%
-  filter(intervention.x == 'NONE' &
-         pred.go.y < go_lim_up &
-         enpv.y >= 0) %>%
-  ggplot(aes(pred.go.y*100, -enpv_ind.y/dev_prob, color=intervention.y)) +
+go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  filter(pred_go < go_lim_up) %>%
+  filter(int_priv_enpv >= 0) %>%
+  ggplot(aes(pred_go*100, -ind_enpv/prob_to, color=prize_phase)) +
   geom_smooth(method='loess', se=FALSE) +
   facet_wrap(. ~ src, scales='free', nrow=2) +
-  xlab('Probability of go-decision (%) under prize size') +
-  ylab('Indirect ENPV per exit (million usd)') +
+  xlab('P(go)') +
+  ylab('Indirect ENPV\n(million usd)') +
+  ggtitle('Intervened Private ENPV ≥ 0    (per market entry)') +
   scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
-  theme(legend.position = 'top')
+  theme(legend.position = 'bottom')
 ```
 
-For indirect funding, the cost per output curve is shaped similarly to the cost per input curve.
-Importantly however, costs are significantly higher (see y-axis), since we now have to take the technical failure rate into consideration.
-Higher go-rates still cause the bottom line, i.e. the cost per output, to be more expensive than lower go-rates.
-However, whether our public health system can afford a lower go-rate depends greatly on the rate of discovery, i.e. on the entry rate into pre-clinical, and is a gravely important question outside the scope of this study.
-Irrespectively, this figure can be used to estimate how much we will "actually" pay for every new antibiotic when using this form of indirect funding, when choosing to accept a particular go-rate (i.e. chance of any given project reaching a go-decision in pre-clinical).
+
+## Direct ENPV
+
+```{r, inefficiency-vs-direct-enpv-per-entry, echo=FALSE}
+finals %>%
+  ggplot(aes(publ_inefficiency*100, -inef_dir_enpv, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('Direct ENPV\n(million usd)') +
+  ggtitle('per go-decision') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none')
+```
+
+```{r, inefficiency-vs-direct-enpv-per-exit, echo=FALSE}
+finals %>%
+  ggplot(aes(publ_inefficiency*100, -inef_dir_enpv/prob_to, color=src)) +
+  geom_point(shape=1) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ src) +
+  xlab('Public inefficiency (%)') +
+  ylab('Direct ENPV\n(million usd)') +
+  ggtitle('per market entry') +
+  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  theme(legend.position='none')
+```
+
+
+## Between-subject comparison
+
+Note the truncation of the right plots.
+
+```{r, cost-difference-comparison, echo=FALSE}
+for (curr in unique(go_models$src)) {
+  sub <- go_models %>%
+    filter(src == curr) %>%
+    unnest_legacy(data, pred_go) %>%
+    filter(pred_go < go_lim_up) %>%
+    filter(int_priv_enpv >= 0)
+
+  p1 <- sub %>%
+    ggplot(aes(pred_go*100, -ind_enpv/prob_to,
+              group=prize_phase, color=prize_phase)) +
+    geom_point(shape=20, alpha=0.5) +
+    geom_smooth(method='loess', se=FALSE) +
+    geom_line(stat='smooth', method='loess', color='black', alpha=0.2, size=1) +
+    xlab('% no turned go') +
+    ylab('Indirect ENPV per exit\n(million usd)') +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
+                       breaks = scales::pretty_breaks(n = 8)) +
+    theme(legend.position = 'bottom') +
+    ggtitle('Indirect funding')
+
+  p2 <- sub %>%
+    ggplot(aes(publ_inefficiency*100, -inef_dir_enpv/prob_to)) +
+    geom_point(shape=20, color='darkgrey', alpha=0.6) +
+    geom_line(stat='smooth', method='lm', size=1, color='red') +
+    xlab('Public inefficiency (%)') +
+    ylab('Direct ENPV per exit\n(million usd)') +
+    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
+                       breaks = scales::pretty_breaks(n = 8),
+                       position='right'
+                       ) +
+    theme(legend.position = 'none') +
+    ggtitle('Direct funding')
+
+  # Sync y axis
+  p1y <- ggplot_build(p1)$layout$panel_scales_y[[1]]$range$range
+  p2y <- ggplot_build(p2)$layout$panel_scales_y[[1]]$range$range
+  p1 <- p1 + coord_cartesian(ylim = range(p1y))
+  p2 <- p2 + coord_cartesian(ylim = range(p1y))
+
+  #print(plot_grid(p1, p2, ncol=2, align='h', axis='bt', rel_widths=c(1.8,1)))
+  ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1.8, 1), common.legend=TRUE, legend='top') %>%
+    annotate_figure(top = curr) %>%
+    print
+}
+```
+
+
+## Binned difference
+
+TODO: Doesn't seem like we have enough samples in these narrow spans.
+Resample a specific prize and inefficiency and use that instead.
+
+```{r, kljhsdkjlhlsdkhgk, echo=FALSE}
+go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  filter(int_priv_enpv >= 0) %>%
+  filter(pred_go >= 0.94) %>%
+  filter(pred_go <= 0.99) %>%
+  mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
+  ggplot(aes(publ_inefficiency * 100,
+             (inef_dir_enpv - ind_enpv)/10^6,
+             color=prize_phase)) +
+    ggtitle(sprintf('%s  p(go) = [0.94, 0.99]', '')) +
+    ylab('Difference in favor of direct (million usd per go-decision)') +
+    geom_smooth(method='lm', se=FALSE) +
+    facet_wrap(. ~ src, nrow=1) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1),
+          legend.position = 'bottom')
+```
+
+### Per phase
+```{r, within-subject-high-go-rates-per-phase, echo=FALSE}
+for (curr in unique(finals$prize_phase)) {
+  p <- go_models %>%
+    filter(prize_phase == curr) %>%
+    unnest_legacy(data, pred_go) %>%
+    filter(int_priv_enpv >= 0) %>%
+    filter(pred_go >= 0.91) %>%
+    filter(pred_go <= 0.99) %>%
+    mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
+    ggplot(aes(publ_inefficiency * 100,
+              (inef_dir_enpv - ind_enpv)/10^6)) +
+    ggtitle(sprintf('%s    P(go) = [0.91, 0.99]', curr)) +
+    ylab('Difference in favor of direct (million usd per go-decision)') +
+    geom_point(aes(color=favorable)) +
+    geom_smooth(method='lm', se=FALSE, color='black') +
+    facet_wrap(. ~ src, nrow=1) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  print(p)
+}
+```
+
+### Combined
+
+```{r, hsdkjfhslhskdfgkc, echo=FALSE}
+go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  filter(int_priv_enpv >= 0) %>%
+  filter(pred_go >= 0.91) %>%
+  filter(pred_go <= 0.99) %>%
+  mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
+  ggplot(aes(publ_inefficiency * 100,
+             (inef_dir_enpv - ind_enpv)/10^6)) +
+  ggtitle('all datasets  P(go) = [0.91, 0.99]') +
+  ylab('Difference in favor of direct (million usd per go-decision)') +
+  geom_point(aes(color=favorable)) +
+  geom_smooth(method='lm', se=FALSE, color='black') +
+  facet_wrap(. ~ prize_phase, nrow=1) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Point estimated inefficiency
+
+```{r, sdfhsdflg, echo=FALSE}
+tmp <- go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  filter(int_priv_enpv >= 0) %>%
+  filter(pred_go >= 0.91) %>%
+  filter(pred_go <= 0.99) %>%
+  filter(publ_inefficiency >= 0.3) %>%
+  filter(publ_inefficiency <= 0.4)
+```
+
+#### Per market entry
+```{r, aslkjdhfkjfd, echo=FALSE}
+tmp %>%
+  group_by(prize_phase, src) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to),
+            sd_diff   = sd(inef_dir_enpv/prob_to - ind_enpv/prob_to),
+            ymin      = mean_diff - sd_diff,
+            ymin2     = mean_diff - sd_diff * 2,
+            ymax      = mean_diff + sd_diff,
+            ymax2     = mean_diff + sd_diff * 2,
+            Favorable = ifelse(sum(inef_dir_enpv/prob_to) > sum(ind_enpv/prob_to),
+                               'Direct',
+                               'Indirect')) %>%
+  ggplot(aes(src, mean_diff/10^6, fill=Favorable)) +
+    geom_col() +
+    geom_linerange(color='red',
+                   aes(ymin=ifelse(ymin>=0, ymin/10^6, 0),
+                       ymax=ifelse(ymax>=0, ymax/10^6, 0))) +
+    geom_linerange(color='blue',
+                   aes(ymin=ifelse(ymin<=0, ymin/10^6, 0),
+                       ymax=ifelse(ymax<=0, ymax/10^6, 0))) +
+    facet_wrap(. ~ prize_phase, ncol=1, strip.position='right') +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+    ylab('Mean cost-savings of direct funding per market entry (million usd)') +
+    xlab(element_blank()) +
+    coord_flip() +
+    ggtitle('P(go) = [0.91, 0.99]     Public inefficiency = [0.3, 0.4]     +/- 1sd') +
+    theme(legend.position = 'right',
+          panel.spacing = unit(1, 'mm'))
+```
+
+```{r, hlkjsdslkjdhfkjfd, echo=FALSE}
+tmp %>%
+  group_by(prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to),
+            Favorable = ifelse(sum(inef_dir_enpv/prob_to) > sum(ind_enpv/prob_to),
+                               'Direct',
+                               'Indirect')) %>%
+  mutate(prize_phase = factor(prize_phase, levels=rev(PHASES))) %>%
+  ggplot(aes(prize_phase, mean_diff/10^6, fill=Favorable)) +
+    geom_col() +
+    coord_flip() +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+    ylab('Mean cost-savings of direct funding\nper market entry (million usd)') +
+    xlab(element_blank()) +
+    ggtitle('P(go)=[0.91, 0.99]  public inefficiency=[0.3, 0.4]\nAssumes prize size tailored per indication to avoid overpaying')
+```
+
+#### Per go-decision
+```{r, aslkjdhffd, echo=FALSE}
+tmp %>%
+  group_by(prize_phase, src) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv),
+            sd_diff   = sd(inef_dir_enpv - ind_enpv),
+            ymin      = mean_diff - sd_diff,
+            ymin2     = mean_diff - sd_diff * 2,
+            ymax      = mean_diff + sd_diff,
+            ymax2     = mean_diff + sd_diff * 2,
+            Favorable = ifelse(sum(inef_dir_enpv) > sum(ind_enpv),
+                               'Direct',
+                               'Indirect')) %>%
+  ggplot(aes(src, mean_diff/10^6, fill=Favorable)) +
+    geom_col() +
+    geom_linerange(color='red',
+                   aes(ymin=ifelse(ymin>=0, ymin/10^6, 0),
+                       ymax=ifelse(ymax>=0, ymax/10^6, 0))) +
+    geom_linerange(color='blue',
+                   aes(ymin=ifelse(ymin<=0, ymin/10^6, 0),
+                       ymax=ifelse(ymax<=0, ymax/10^6, 0))) +
+    facet_wrap(. ~ prize_phase, ncol=1, strip.position='right') +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+    ylab('Mean cost-savings of direct funding per go-decision (million usd)') +
+    xlab(element_blank()) +
+    coord_flip() +
+    ggtitle('P(go) = [0.91, 0.99]     Public inefficiency = [0.3, 0.4]     +/- 1sd') +
+    theme(legend.position = 'right',
+          panel.spacing = unit(1, 'mm'))
+```
+
+```{r, asljkhdsskdf, echo=FALSE}
+tmp %>%
+  group_by(prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv),
+            Favorable = ifelse(sum(inef_dir_enpv) > sum(ind_enpv),
+                               'Direct',
+                               'Indirect')) %>%
+  mutate(prize_phase = factor(prize_phase, levels=rev(PHASES))) %>%
+  ggplot(aes(prize_phase, mean_diff/10^6, fill=Favorable)) +
+    geom_col() +
+    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
+    ylab('Mean cost-savings of direct funding per go-decision (million usd)') +
+    xlab(element_blank()) +
+    coord_flip() +
+    ggtitle('P(go)=[0.91, 0.99]  public inefficiency=[0.3, 0.4]\nAssumes prize size tailored per indication to avoid overpaying') +
+    theme(legend.position = 'right')
+```
+
+
+## Predicting cost difference
+
+We can predict the cost difference between indirect and direct funding by building a linear model where public inefficiency and P(go) are independent variables.
+Note that since P(go) is predicted from prize size we could have used prize size as an independent variable but choose to use P(go) since it is a more meaningful model construct.
+Choosing P(go) over prize size also makes it significantly easier to compare cost differences across prize phases without having to correct for the effect of the phase of intervention.
+
+Note that it only makes sense to compare cost difference in projects that reach go-decisions (hence the filter below).
+Also note that we only consider prize sizes with a predicted P(go) < `r go_lim_up` to avoid nonlinearity in the prediction model, caused by the fact that prize sizes larger than the one needed for P(go) = 1 will still yield P(go) = 1.
+
+```{r, lkjkj1hghjk}
+diff_model <- function(df)
+  glm(inef_dir_enpv - ind_enpv ~ publ_inefficiency + pred_go, data = df)
+
+diff_models <- go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  # Only compare cost diff in projs with go-deciison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  # Ignore prize sizes that cause P(go) ~ 100
+  filter(pred_go < go_lim_up) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(diff_fit = map(data, diff_model),
+         pred_diff = map2(diff_fit, data, predict_response),
+         tidied = map(diff_fit, tidy),
+         glanced = map(diff_fit, glance)) %>%
+  ungroup
+```
+
+All p-values are significant.
+
+```{r, akhjlshlkdsf, dependson=-1, echo=FALSE}
+decimals <- 5
+diff_models %>%
+  unnest_legacy(tidied) %>%
+  select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value) %>%
+  kable(digits=decimals,
+        caption=sprintf('P-values rounded to %s decimals (i.e. p < %s if 0)',
+                        decimals,
+                        10^-decimals))
+```
+
+```{r, jlshdfk, dependson=-1, echo=FALSE}
+diff_models %>%
+  unnest_legacy(pred_diff, data) %>%
+  ggplot(aes(pred_go, pred_diff)) +
+  geom_point(shape=1) +
+  facet_wrap(prize_phase ~ src, scale='free') +
+  theme(legend.position = 'none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
+
+diff_models %>%
+  unnest_legacy(pred_diff, data) %>%
+  ggplot(aes(publ_inefficiency, pred_diff)) +
+  geom_point(shape=1) +
+  facet_wrap(prize_phase ~ src, scale='free') +
+  theme(legend.position = 'none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
+```
+
+
+### Difference heatmap
+Using the above model we can generate a dataset of independent variables spanning the full range from 0 to 1 and then predict the cost difference for all points.
+From this dataset and its predictions we can begin exploring these three-dimensional relationships.
+
+```{r, sjhlfsdf}
+steps <- 21
+x <- data.frame(pred_go = seq(0, 1, length.out=steps))
+y <- data.frame(publ_inefficiency = seq(public_inefficiency_min,
+                                        public_inefficiency_max,
+                                        length.out=steps))
+# Build cartesian product of independent variables
+variations <- merge(x, y)
+```
+
+Predict dependent variable, i.e. the cost difference between direct and indirect funding, from the broad range of independent variables generated above.
+
+```{r, alhlkjsadhf, dependson=-1}
+span <- diff_models %>%
+  select(src, prize_phase, diff_fit) %>%
+  group_by(src, prize_phase) %>%
+  mutate(data = list(variations),
+         pred_diff = map2(diff_fit, data, predict_response)) %>%
+  unnest_legacy(data, pred_diff) %>%
+  ungroup
+```
+
+The predictions yield the following heatmaps.
+
+```{r, jkhflsf, dependson=-1, echo=FALSE}
+for (curr in unique(tmp$prize_phase)) {
+  p <- span %>%
+    filter(prize_phase == curr) %>%
+    ggplot(aes(pred_go*100, publ_inefficiency*100, z=pred_diff/10^6)) +
+      facet_wrap(. ~ src) +
+      geom_tile(aes(fill=pred_diff/10^6)) +
+      #geom_contour(bins=steps, color='black', alpha=0.25) +
+      scale_fill_gradient2(low='blue', high='red', mid='white', name='Diff', breaks=pretty_breaks(n=7)) +
+      ylab('Public inefficiency') +
+      xlab('P(go)') +
+      ggtitle(curr) +
+      theme(legend.position = 'right',
+        panel.spacing = unit(1, 'mm'))
+  print(p)
+}
+```
+
+### Difference table
+
+Tables with same information for P1 and M1.
+
+```{r, sdfkjlhsdfg, dependson=-1, echo=FALSE, results='asis'}
+for (curr_phase in c('P1', 'M1')) {
+  tmp <- span %>%
+    filter(prize_phase == curr_phase) %>%
+    group_by(pred_go, publ_inefficiency) %>%
+    summarize(mean_pred_diff = mean(pred_diff)) %>%
+    ungroup %>%
+    select(pred_go, publ_inefficiency, mean_pred_diff) %>%
+    mutate(mean_pred_diff = round(mean_pred_diff/10^6, 1),
+           pred_go = round(pred_go * 100, 0),
+           publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
+    spread(publ_inefficiency, mean_pred_diff) %>%
+    kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per go-decision) of %s prize', curr_phase)) %>%
+    print
+}
+```
+
+
+## Resampled within-subject analysis
+TODO: Resample with prizes that according to the go model yields a P(g) ~ 0.95. Run with both prizes that are suitable per indication but also with prizes that are suitable for all indications without controlling for indications. I.e. a broad vs a narrow PER.
 

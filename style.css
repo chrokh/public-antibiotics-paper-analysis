@@ -1,0 +1,13 @@
+/* Make tables scroll horizontally if too much content. */
+table {
+  display: block !important;
+  overflow-x: auto !important;
+  white-space: nowrap !important;
+}
+table tr:hover td {
+  background-color: #dedede;
+}
+
+.book .book-body .page-wrapper .page-inner {
+  max-width: 920px;
+}
