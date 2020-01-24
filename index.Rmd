@@ -1726,10 +1726,15 @@ scenarioB <- valuable %>%
   final_valuation
 ```
 
-```{r, ljhfsk, dependson=-1, echo=FALSE}
-scenarioA %>%
+```{r, ljhfsk, dependson=-1, echo=FALSE, results='asis'}
+tmp <- scenarioA %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
+tmp %>%
+  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  spread(prize_phase, mean_diff) %>%
+  kable(caption='Narrow prizes (per go-decision) (million usd)')
+tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
   ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
   geom_col() +
@@ -1740,9 +1745,14 @@ scenarioA %>%
   coord_flip() +
   ggtitle('Narrow prizes (per go-decision)')
 
-scenarioA %>%
+tmp <- scenarioA %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to)) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
+tmp %>%
+  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  spread(prize_phase, mean_diff) %>%
+  kable(caption='Narrow prizes (per market entry) (million usd)')
+tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
   ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
   geom_col() +
@@ -1753,9 +1763,14 @@ scenarioA %>%
   coord_flip() +
   ggtitle('Narrow prizes (per market entry)')
 
-scenarioB %>%
+tmp <- scenarioB %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
+tmp %>%
+  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  spread(prize_phase, mean_diff) %>%
+  kable(caption='Broad prizes (per go-decision) (million usd)')
+tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
   ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
   geom_col() +
@@ -1766,9 +1781,14 @@ scenarioB %>%
   coord_flip() +
   ggtitle('Broad prizes (per go-decision)')
 
-scenarioB %>%
+tmp <- scenarioB %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to)) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
+tmp %>%
+  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  spread(prize_phase, mean_diff) %>%
+  kable(caption='Broad prizes (per market entry) (million usd)')
+tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
   ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
   geom_col() +
@@ -1777,6 +1797,6 @@ scenarioB %>%
   xlab(element_blank()) +
   ylab('Cost difference (million usd)') +
   coord_flip() +
-  ggtitle('Broad prizes')
+  ggtitle('Broad prizes (per market entry)')
 ```
 
