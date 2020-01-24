@@ -39,7 +39,7 @@ In other words, `N` is the number of random samples that we'll draw from a stoch
 The distribution of the stochastic project depends on the data set we're using, and in a simple attempt to avoid drawing data set specific conclusions, we'll look at multiple data sets.
 
 ```{r, set-n}
-N = 1500
+N = 2000
 ```
 
 ```{r, basics, include=FALSE}
@@ -1680,7 +1680,7 @@ for (curr_phase in c('M1')) {
 To consider the cost difference between direct and indirect funding in a specific scenario we combine the prize sizes identified in the section [Effective prize sizes](#effective-prize-sizes) with a public sector inefficiency of 50%:
 
 We replace the old values in the `valuable` dataset with these new values and then rerun it through the `valuation` function.
-However, we only keep the `r M=300; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
+However, we only keep the `r M=500; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
 
 ```{r, sdhlkfdss, include=FALSE}
 take_subjects <- function(df, m)
