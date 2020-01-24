@@ -773,20 +773,24 @@ When only looking at the final value we are only interested in the cumulative va
 Further we also remove all timestep specific information.
 
 ```{r, finals}
-finals <- valued %>%
-  group_by(subject, prize_phase) %>%
-  filter(time_to == max(time_to)) %>%
-  select(-matches('_cf$|_pv$|_ev$|_epv$')) %>%
-  select(-phase_year,
-         -phase,
-         -time,
-         -inef_time,
-         -cost,
-         -inef_cost,
-         -sales,
-         -prob,
-         -prize) %>%
-  ungroup
+final_valuation <- function(df) {
+  df %>%
+    group_by(subject, prize_phase) %>%
+    filter(time_to == max(time_to)) %>%
+    select(-matches('_cf$|_pv$|_ev$|_epv$')) %>%
+    select(-phase_year,
+           -phase,
+           -time,
+           -inef_time,
+           -cost,
+           -inef_cost,
+           -sales,
+           -prob,
+           -prize) %>%
+    ungroup
+}
+
+finals <- final_valuation(valued)
 ```
 
 
@@ -1048,7 +1052,7 @@ tmp %>%
 ```
 
 
-### Effective prize sizes
+### Effective prize sizes{#effective-prize-sizes}
 Using our function that solves for prize size from a given probability of go we can predict what prize sizes are required to achive a target probability of go of `r target=0.95; target*100`% in each of the sources?
 
 ```{r, klhjsdfkdf}
@@ -1551,7 +1555,7 @@ for (curr in unique(tmp$prize_phase)) {
 }
 ```
 
-### Difference table
+### Difference table (means)
 
 Tables with same information for P1 and M1.
 
@@ -1572,7 +1576,129 @@ for (curr_phase in c('P1', 'M1')) {
 }
 ```
 
+### Indication-specific difference tables
+```{r, sdfkjlhsdfg2, dependson=-1, echo=FALSE, results='asis'}
+for (curr_phase in c('M1')) {
+  for (curr_src in unique(span$src)) {
+    tmp <- span %>%
+      filter(prize_phase == curr_phase) %>%
+      filter(src == curr_src) %>%
+      group_by(pred_go, publ_inefficiency) %>%
+      summarize(mean_pred_diff = mean(pred_diff)) %>%
+      ungroup %>%
+      select(pred_go, publ_inefficiency, mean_pred_diff) %>%
+      mutate(mean_pred_diff = round(mean_pred_diff/10^6, 1),
+             pred_go = round(pred_go * 100, 0),
+             publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
+      spread(publ_inefficiency, mean_pred_diff) %>%
+      kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per go-decision) of %s prize for %s', curr_phase, curr_src)) %>%
+      print
+  }
+}
+```
 
-## Resampled within-subject analysis
-TODO: Resample with prizes that according to the go model yields a P(g) ~ 0.95. Run with both prizes that are suitable per indication but also with prizes that are suitable for all indications without controlling for indications. I.e. a broad vs a narrow PER.
+
+## Resampled scenarios
+To consider the cost difference between direct and indirect funding in a specific scenario we combine the prize sizes identified in the section [Effective prize sizes](#effective-prize-sizes) with a public sector inefficiency of 50%:
+
+We replace the old values in the `valuable` dataset with these new values and then rerun it through the `valuation` function.
+However, we only keep the `r M=300; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
+
+```{r, sdhlkfdss, include=FALSE}
+take_subjects <- function(df, m)
+  df %>%
+    group_by(src, prize_phase) %>%
+    filter(subject >= min(subject) & subject < min(subject) + m) %>%
+    ungroup
+```
+
+We construct two scenarios, A and B, where the prize size in A is indication and phase specific, and the prize size in B is the largest effective prize size for that phase (i.e. only phase specific).
+Scenario B thus models the idea of not targeting interventions but still choosing a known effective prize size.
+
+```{r, skjldfhksf}
+scenarioA <- valuable %>%
+  take_subjects(M) %>%
+  # Remove old stochastic values
+  select(-prize_size, -publ_inefficiency) %>%
+  # Replace with scenario
+  merge(.,
+        effectives %>% rename(prize_size = pred_prize_size),
+        by=c('src', 'prize_phase')) %>%
+  # Add public inefficiency estimate
+  mutate(publ_inefficiency = 0.5) %>%
+  # Run valuation but only keep final
+  valuation %>%
+  final_valuation
+
+scenarioB <- valuable %>%
+  take_subjects(M) %>%
+  # Remove old stochastic values
+  select(-prize_size, -publ_inefficiency) %>%
+  # Replace with scenario
+  merge(.,
+        (effectives %>%
+         group_by(prize_phase) %>%
+         summarize(prize_size = max(pred_prize_size)) %>%
+         ungroup),
+        by=c('prize_phase')) %>%
+  # Add public inefficiency estimate
+  mutate(publ_inefficiency = 0.5) %>%
+  # Run valuation but only keep final
+  valuation %>%
+  final_valuation
+```
+
+```{r, ljhfsk, dependson=-1, echo=FALSE}
+scenarioA %>%
+  group_by(src, prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
+  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  geom_col() +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Difference (million usd)') +
+  coord_flip() +
+  ggtitle('Narrow prizes (per go-decision)')
+
+scenarioA %>%
+  group_by(src, prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to)) %>%
+  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
+  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  geom_col() +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost difference (million usd)') +
+  coord_flip() +
+  ggtitle('Narrow prizes (per market entry)')
+
+scenarioB %>%
+  group_by(src, prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
+  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  geom_col() +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost difference (million usd)') +
+  coord_flip() +
+  ggtitle('Broad prizes (per go-decision)')
+
+scenarioB %>%
+  group_by(src, prize_phase) %>%
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to)) %>%
+  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
+  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  geom_col() +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost difference (million usd)') +
+  coord_flip() +
+  ggtitle('Broad prizes')
+```
 
