@@ -1449,6 +1449,9 @@ Also note that we only consider prize sizes with a predicted P(go) < `r go_lim_u
 diff_model <- function(df)
   glm(inef_dir_enpv - ind_enpv ~ publ_inefficiency + pred_go, data = df)
 
+market_diff_model <- function(df)
+  glm((inef_dir_enpv - ind_enpv) / prob_to ~ publ_inefficiency + pred_go, data = df)
+
 diff_models <- go_models %>%
   unnest_legacy(data, pred_go) %>%
   # Only compare cost diff in projs with go-deciison after intervention
@@ -1459,17 +1462,21 @@ diff_models <- go_models %>%
   nest %>%
   mutate(diff_fit = map(data, diff_model),
          pred_diff = map2(diff_fit, data, predict_response),
-         tidied = map(diff_fit, tidy),
-         glanced = map(diff_fit, glance)) %>%
+         tidied_diff = map(diff_fit, tidy),
+         market_diff_fit = map(data, market_diff_model),
+         pred_market_diff = map2(market_diff_fit, data, predict_response),
+         tidied_market_diff = map(market_diff_fit, tidy)) %>%
   ungroup
 ```
 
+### P-values
 All p-values are significant.
 
+#### P-values of go-decision model
 ```{r, akhjlshlkdsf, dependson=-1, echo=FALSE}
 decimals <- 5
 diff_models %>%
-  unnest_legacy(tidied) %>%
+  unnest_legacy(tidied_diff) %>%
   select(src, prize_phase, term, p.value) %>%
   spread(prize_phase, p.value) %>%
   kable(digits=decimals,
@@ -1478,6 +1485,21 @@ diff_models %>%
                         10^-decimals))
 ```
 
+#### P-values of market entry model
+```{r, akhjlshlkdsf2, dependson=-1, echo=FALSE}
+decimals <- 5
+diff_models %>%
+  unnest_legacy(tidied_market_diff) %>%
+  select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value) %>%
+  kable(digits=decimals,
+        caption=sprintf('P-values rounded to %s decimals (i.e. p < %s if 0)',
+                        decimals,
+                        10^-decimals))
+```
+
+### Two-dimensional plotting
+#### 2D-plotting of go-decision model
 ```{r, jlshdfk, dependson=-1, echo=FALSE}
 diff_models %>%
   unnest_legacy(pred_diff, data) %>%
@@ -1508,8 +1530,39 @@ diff_models %>%
         strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
 ```
 
+#### 2D-plotting of market entry model
+```{r, jlshdfk2, dependson=-1, echo=FALSE}
+diff_models %>%
+  unnest_legacy(pred_market_diff, data) %>%
+  ggplot(aes(pred_go, pred_market_diff)) +
+  geom_point(shape=1) +
+  facet_wrap(prize_phase ~ src, scale='free') +
+  theme(legend.position = 'none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
 
-### Difference heatmap
+diff_models %>%
+  unnest_legacy(pred_market_diff, data) %>%
+  ggplot(aes(publ_inefficiency, pred_market_diff)) +
+  geom_point(shape=1) +
+  facet_wrap(prize_phase ~ src, scale='free') +
+  theme(legend.position = 'none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.spacing = unit(0, 'cm'),
+        strip.text.x = element_text(margin = margin(0, 0, 0, 0, 'cm')),
+        strip.text.y = element_text(margin = margin(0, 0, 0, 0, 'cm')))
+```
+
+
+## Difference heatmap
 Using the above model we can generate a dataset of independent variables spanning the full range from 0 to 1 and then predict the cost difference for all points.
 From this dataset and its predictions we can begin exploring these three-dimensional relationships.
 
@@ -1527,20 +1580,22 @@ Predict dependent variable, i.e. the cost difference between direct and indirect
 
 ```{r, alhlkjsadhf, dependson=-1}
 span <- diff_models %>%
-  select(src, prize_phase, diff_fit) %>%
+  select(src, prize_phase, diff_fit, market_diff_fit) %>%
   group_by(src, prize_phase) %>%
   mutate(data = list(variations),
-         pred_diff = map2(diff_fit, data, predict_response)) %>%
-  unnest_legacy(data, pred_diff) %>%
+         pred_diff = map2(diff_fit, data, predict_response),
+         pred_market_diff = map2(market_diff_fit, data, predict_response)) %>%
   ungroup
 ```
 
 The predictions yield the following heatmaps.
 
+### Go-decision heatmaps
 ```{r, jkhflsf, dependson=-1, echo=FALSE}
 for (curr in unique(tmp$prize_phase)) {
   p <- span %>%
     filter(prize_phase == curr) %>%
+    unnest_legacy(data, pred_diff) %>%
     ggplot(aes(pred_go*100, publ_inefficiency*100, z=pred_diff/10^6)) +
       facet_wrap(. ~ src) +
       geom_tile(aes(fill=pred_diff/10^6)) +
@@ -1555,34 +1610,35 @@ for (curr in unique(tmp$prize_phase)) {
 }
 ```
 
-### Difference table (means)
-
-Tables with same information for P1 and M1.
-
-```{r, sdfkjlhsdfg, dependson=-1, echo=FALSE, results='asis'}
-for (curr_phase in c('P1', 'M1')) {
-  tmp <- span %>%
-    filter(prize_phase == curr_phase) %>%
-    group_by(pred_go, publ_inefficiency) %>%
-    summarize(mean_pred_diff = mean(pred_diff)) %>%
-    ungroup %>%
-    select(pred_go, publ_inefficiency, mean_pred_diff) %>%
-    mutate(mean_pred_diff = round(mean_pred_diff/10^6, 1),
-           pred_go = round(pred_go * 100, 0),
-           publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
-    spread(publ_inefficiency, mean_pred_diff) %>%
-    kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per go-decision) of %s prize', curr_phase)) %>%
-    print
+### Market entry heatmaps
+```{r, jkhflsf2, dependson=-1, echo=FALSE}
+for (curr in unique(tmp$prize_phase)) {
+  p <- span %>%
+    filter(prize_phase == curr) %>%
+    unnest_legacy(data, pred_market_diff) %>%
+    ggplot(aes(pred_go*100, publ_inefficiency*100, z=pred_market_diff/10^6)) +
+      facet_wrap(. ~ src) +
+      geom_tile(aes(fill=pred_market_diff/10^6)) +
+      #geom_contour(bins=steps, color='black', alpha=0.25) +
+      scale_fill_gradient2(low='blue', high='red', mid='white', name='Diff', breaks=pretty_breaks(n=7)) +
+      ylab('Public inefficiency') +
+      xlab('P(go)') +
+      ggtitle(curr) +
+      theme(legend.position = 'right',
+        panel.spacing = unit(1, 'mm'))
+  print(p)
 }
 ```
 
-### Indication-specific difference tables
-```{r, sdfkjlhsdfg2, dependson=-1, echo=FALSE, results='asis'}
+## Difference tables
+### Go-decision diff tables
+```{r, sdfkjlhsdfg, dependson=-1, echo=FALSE, results='asis'}
 for (curr_phase in c('M1')) {
   for (curr_src in unique(span$src)) {
     tmp <- span %>%
       filter(prize_phase == curr_phase) %>%
       filter(src == curr_src) %>%
+      unnest_legacy(data, pred_diff) %>%
       group_by(pred_go, publ_inefficiency) %>%
       summarize(mean_pred_diff = mean(pred_diff)) %>%
       ungroup %>%
@@ -1592,6 +1648,28 @@ for (curr_phase in c('M1')) {
              publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
       spread(publ_inefficiency, mean_pred_diff) %>%
       kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per go-decision) of %s prize for %s', curr_phase, curr_src)) %>%
+      print
+  }
+}
+```
+
+### Market entry diff tables
+```{r, sdfkjlhsdfg2, dependson=-1, echo=FALSE, results='asis'}
+for (curr_phase in c('M1')) {
+  for (curr_src in unique(span$src)) {
+    tmp <- span %>%
+      filter(prize_phase == curr_phase) %>%
+      filter(src == curr_src) %>%
+      unnest_legacy(data, pred_market_diff) %>%
+      group_by(pred_go, publ_inefficiency) %>%
+      summarize(mean_pred_market_diff = mean(pred_market_diff)) %>%
+      ungroup %>%
+      select(pred_go, publ_inefficiency, mean_pred_market_diff) %>%
+      mutate(mean_pred_market_diff = round(mean_pred_market_diff/10^6, 1),
+             pred_go = round(pred_go * 100, 0),
+             publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
+      spread(publ_inefficiency, mean_pred_market_diff) %>%
+      kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per market entry) of %s prize for %s', curr_phase, curr_src)) %>%
       print
   }
 }
