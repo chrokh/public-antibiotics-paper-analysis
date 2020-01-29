@@ -74,8 +74,8 @@ rtriangle2 <- function(n, mins, maxs, mids) {
   xs
 }
 
-log10_sample <- function (n, min, max, magnitude_min, magnitude_max)
-  runif(n, min, max) * (10 ^ runif(n, magnitude_min, magnitude_max))
+log10_sample <- function (n, magnitude_min, magnitude_max)
+  10^runif(n, magnitude_min, magnitude_max)
 
 # The phases we'll be working with
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
@@ -299,18 +299,14 @@ In the analysis we at all times "control for" prizes which means that the chosen
 The table below show the intervention distribution that we are sampling from.
 
 ```{r, intervention-dist, echo=FALSE}
-intervention_dist_prize_min <- 1
-intervention_dist_prize_max <- 9.999999999
 intervention_dist_magn_min <- 5
-intervention_dist_magn_max <- 9
+intervention_dist_magn_max <- 10
 
 # Print as table
 # TODO: More descriptive table headers
-data.frame(parameter = c('Multiplier', 'Exponent'),
-           min = c(intervention_dist_prize_min,
-                   intervention_dist_magn_min),
-           max = c(intervention_dist_prize_max,
-                   intervention_dist_magn_max)) %>%
+data.frame(parameter = 'Exponent',
+           min = intervention_dist_magn_min,
+           max = intervention_dist_magn_max) %>%
   kable(caption='Interventions')
 ```
 
@@ -469,12 +465,10 @@ additional <- additional %>% mutate(publ_inefficiency = runif(n(), min, max))
 Finally we sample and add intervention prize sizes.
 
 ```{r, sample-intervention-prize-size}
-prize_min <- intervention_dist_prize_min
-prize_max <- intervention_dist_prize_max
 magn_min <- intervention_dist_magn_min
 magn_max <- intervention_dist_magn_max
 additional <- additional %>%
-  mutate(prize_size = log10_sample(n(), prize_min, prize_max, magn_min, magn_max))
+  mutate(prize_size = log10_sample(n(), magn_min, magn_max))
 ```
 
 Below is an excerpt of the resulting dataframe.
