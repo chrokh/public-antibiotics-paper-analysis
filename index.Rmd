@@ -914,7 +914,6 @@ finals %>%
 Build model.
 
 ```{r, hjlfksjdhf}
-
 go_model <- function(df)
   glm(int_priv_enpv >= 0 ~ log10(prize_size),
       data = df %>% filter(priv_enpv < 0),
@@ -927,7 +926,6 @@ predict_response <- function(fit, df)
 We run the model once per combination of prize phase and source to avoid having to model interaction effects.
 
 ```{r, lshfjksdf}
-
 go_models <- finals %>%
   group_by(src, prize_phase) %>%
   nest %>%
@@ -951,10 +949,15 @@ go_models %>%
   facet_wrap(. ~ src) +
   ylab('P(go)') +
   xlab('Prize size') +
+  theme_minimal() +
   theme(legend.position = 'top') +
+  labs(color = 'Prize phase') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(seq(0,10,2))),
-                     labels = trans_format('log10', math_format(10^.x)))
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(breaks = pretty_breaks(n = 11))
+
+ggsave(file = './_figures/predict-go.eps', plot = last_plot())
 ```
 
 All p-values are significant.
