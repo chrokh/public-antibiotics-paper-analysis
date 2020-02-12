@@ -317,7 +317,7 @@ The table below show the intervention distribution that we are sampling from.
 
 ```{r, intervention-dist, echo=FALSE}
 intervention_dist_magn_min <- 5
-intervention_dist_magn_max <- 10
+intervention_dist_magn_max <- 11
 
 # Print as table
 # TODO: More descriptive table headers
