@@ -74,8 +74,11 @@ rtriangle2 <- function(n, mins, maxs, mids) {
   xs
 }
 
-log10_sample <- function (n, magnitude_min, magnitude_max)
-  10^runif(n, magnitude_min, magnitude_max)
+# Pass in a p-value to get a result like -4 meaning p < 10^-4.
+p_lower_than <- function(p)
+  for (x in -500:100)
+    if (p < 10^x)
+      return(x)
 
 # The phases we'll be working with
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
@@ -162,6 +165,20 @@ sertkaya2014_phase_dist <-
                    )
         ) %>% arrange(phase, indication)
 kable(sertkaya2014_phase_dist, caption='sertkaya2014_phase_dist')
+```
+
+Same table, transposed:
+
+```{r, olhskfjhsdkj, echo=FALSE, results='asis'}
+sertkaya2014_phase_dist %>%
+  pivot_longer(time_min:prob_max, names_to='param', values_to='value') %>%
+  spread(indication, value) %>%
+  separate(param, c('param', 'point'), '_') %>%
+  mutate(point = factor(point, levels=c('min','mid','max'), ordered=T)) %>%
+  select(param, phase, point, everything()) %>%
+  arrange(param, phase, point) %>%
+  kable(caption='Sertkaya et. al (2014)') %>%
+  print
 ```
 
 Sertkaya et. al (2014) seems to not directly sample the market share distribution, but rather to sample a product launch success probability distribution, and then apply that sample to reach an estimate for every year's market share.
@@ -468,7 +485,7 @@ Finally we sample and add intervention prize sizes.
 magn_min <- intervention_dist_magn_min
 magn_max <- intervention_dist_magn_max
 additional <- additional %>%
-  mutate(prize_size = log10_sample(n(), magn_min, magn_max))
+  mutate(prize_size = 10 ^ runif(n(), magn_min, magn_max))
 ```
 
 Below is an excerpt of the resulting dataframe.
@@ -897,8 +914,9 @@ finals %>%
 Build model.
 
 ```{r, hjlfksjdhf}
+
 go_model <- function(df)
-  glm(int_priv_enpv >= 0 ~ prize_size,
+  glm(int_priv_enpv >= 0 ~ log10(prize_size),
       data = df %>% filter(priv_enpv < 0),
       family = binomial(link='logit'))
 
@@ -909,6 +927,7 @@ predict_response <- function(fit, df)
 We run the model once per combination of prize phase and source to avoid having to model interaction effects.
 
 ```{r, lshfjksdf}
+
 go_models <- finals %>%
   group_by(src, prize_phase) %>%
   nest %>%
@@ -941,15 +960,26 @@ go_models %>%
 All p-values are significant.
 
 ```{r, skjldhfsdf, echo=FALSE}
-digits = 4
 tidied %>%
   select(src, prize_phase, term, p.value) %>%
-  spread(prize_phase, p.value) %>%
-  kable(digits=4,
-        caption=sprintf('P-values (rounded to %s decimals, i.e. p < %s if 0)',
-                        digits,
-                        10^-digits))
+  mutate(p.value = format(p.value, scientific=TRUE)) %>%
+  spread(prize_phase, p.value)
 ```
+
+```{r, klhsdfksdkf, echo=FALSE}
+tidied %>%
+  select(src, prize_phase, term, p.value) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  spread(prize_phase, p.value) %>%
+  kable(caption='P-values lower than 10^x')
+
+ends <- tidied %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value),
+            min = min(p.value))
+```
+
+Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
 
 
 ### Predict prize size
@@ -969,12 +999,13 @@ Which we encode as follows.
 ```{r, skhjflsdkf}
 predict_prize_from_prob <- function(tidied, y) {
   b0 <- filter(tidied, term=='(Intercept)')$estimate
-  b1 <- filter(tidied, term=='prize_size')$estimate
-  (log(y / (1-y)) - b0) / b1
+  b1 <- filter(tidied, term=='log10(prize_size)')$estimate
+  10^((log(y / (1-y)) - b0) / b1)
 }
 ```
 
 We can sanity check the output of the function by predicting prize size from predicted P(go) and check if it is correlated with the actual prize size that P(go) was predicted from.
+
 
 ```{r, lkhjgdfg, echo=FALSE}
 tmp <- go_models %>%
@@ -1256,9 +1287,7 @@ for (curr in unique(go_models$src)) {
 
 
 ## Binned difference
-
-TODO: Doesn't seem like we have enough samples in these narrow spans.
-Resample a specific prize and inefficiency and use that instead.
+TODO: Should this be removed now that we have the resampled scenarios section?
 
 ```{r, kljhsdkjlhlsdkhgk, echo=FALSE}
 go_models %>%
@@ -1468,29 +1497,53 @@ All p-values are significant.
 
 #### P-values of go-decision model
 ```{r, akhjlshlkdsf, dependson=-1, echo=FALSE}
-decimals <- 5
 diff_models %>%
   unnest_legacy(tidied_diff) %>%
   select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value)
+
+diff_models %>%
+  unnest_legacy(tidied_diff) %>%
+  select(src, prize_phase, term, p.value) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
   spread(prize_phase, p.value) %>%
-  kable(digits=decimals,
-        caption=sprintf('P-values rounded to %s decimals (i.e. p < %s if 0)',
-                        decimals,
-                        10^-decimals))
+  kable(caption='P-value is lower than 10^x')
+
+ends <- diff_models %>%
+  unnest_legacy(tidied_diff) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value),
+            min = min(p.value))
 ```
+
+Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
+
 
 #### P-values of market entry model
 ```{r, akhjlshlkdsf2, dependson=-1, echo=FALSE}
-decimals <- 5
 diff_models %>%
   unnest_legacy(tidied_market_diff) %>%
   select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value)
+
+diff_models %>%
+  unnest_legacy(tidied_market_diff) %>%
+  select(src, prize_phase, term, p.value) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
   spread(prize_phase, p.value) %>%
-  kable(digits=decimals,
-        caption=sprintf('P-values rounded to %s decimals (i.e. p < %s if 0)',
-                        decimals,
-                        10^-decimals))
+  kable(caption='P-value is lower than 10^x')
+
+ends <- diff_models %>%
+  unnest_legacy(tidied_market_diff) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value),
+            min = min(p.value))
 ```
+
+Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
+
+
+
 
 ### Two-dimensional plotting
 #### 2D-plotting of go-decision model
