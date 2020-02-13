@@ -851,6 +851,61 @@ finals %>%
   theme(legend.position = 'top')
 ```
 
+### Predict private ENPV improvement
+
+To confirm this we can build a model that predicts difference in private ENPV from prize size.
+
+```{r, uiyuihvx}
+improvement_model <- function(df)
+  glm(log10(int_priv_enpv - priv_enpv) ~ log10(prize_size), data = df)
+
+predict_response <- function(fit, df)
+  predict(fit, newdata=df, type='response')
+```
+
+We run the model once per combination of prize phase and source to avoid having to model interaction effects.
+Resulting in the following p-values.
+
+```{r, llsdkfshfjksdf, echo=FALSE, dependson=-1}
+improvement_models <- finals %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(improvement_fit = map(data, improvement_model),
+         pred_improvement = map2(improvement_fit, data, predict_response),
+         tidied = map(improvement_fit, tidy)) %>%
+  ungroup
+
+improvement_models %>%
+  unnest_legacy(tidied) %>%
+  select(src, prize_phase, term, p.value) %>%
+  mutate(p.value = format(p.value, scientific=TRUE)) %>%
+  spread(prize_phase, p.value) %>%
+  kable(caption='P-values')
+
+ends <- improvement_models %>%
+  unnest_legacy(tidied) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value),
+            min = min(p.value))
+```
+
+Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
+
+```{r, klshj, echo=FALSE, dependson=-1}
+improvement_models %>%
+  unnest_legacy(data, pred_improvement) %>%
+  ggplot(aes(prize_size, 10^pred_improvement, color=prize_phase)) +
+  geom_point(aes(y = int_priv_enpv - priv_enpv), alpha=0.5, shape=1) +
+  geom_line() +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  facet_wrap(. ~ src) +
+  theme(legend.position = 'top')
+```
 
 
 ## Probability of go
