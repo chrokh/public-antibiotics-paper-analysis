@@ -1752,7 +1752,7 @@ for (curr_phase in c('M1')) {
              pred_go = round(pred_go * 100, 0),
              publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
       spread(publ_inefficiency, mean_pred_diff) %>%
-      kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per go-decision) of %s prize for %s', curr_phase, curr_src)) %>%
+      kable(caption=sprintf('%s %s Mean cost-savings of direct funding per go-decision', curr_phase, curr_src)) %>%
       print
   }
 }
@@ -1774,7 +1774,7 @@ for (curr_phase in c('M1')) {
              pred_go = round(pred_go * 100, 0),
              publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
       spread(publ_inefficiency, mean_pred_market_diff) %>%
-      kable(caption=sprintf('Mean (across indications) cost-savings of direct funding (per market entry) of %s prize for %s', curr_phase, curr_src)) %>%
+      kable(caption=sprintf('%s %s Mean cost-savings of direct funding per market entry', curr_phase, curr_src)) %>%
       print
   }
 }
