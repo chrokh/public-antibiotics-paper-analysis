@@ -1785,7 +1785,7 @@ for (curr_phase in c('M1')) {
 To consider the cost difference between direct and indirect funding in a specific scenario we combine the prize sizes identified in the section [Effective prize sizes](#effective-prize-sizes) with a public sector inefficiency of 50%:
 
 We replace the old values in the `valuable` dataset with these new values and then rerun it through the `valuation` function.
-However, we only keep the `r M=500; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
+However, we only keep the `r M = 500; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
 
 ```{r, sdhlkfdss, include=FALSE}
 take_subjects <- function(df, m)
@@ -1793,12 +1793,13 @@ take_subjects <- function(df, m)
     group_by(src, prize_phase) %>%
     filter(subject >= min(subject) & subject < min(subject) + m) %>%
     ungroup
+
 ```
 
 We construct two scenarios, A and B, where the prize size in A is indication and phase specific, and the prize size in B is the largest effective prize size for that phase (i.e. only phase specific).
 Scenario B thus models the idea of not targeting interventions but still choosing a known effective prize size.
 
-```{r, skjldfhksf}
+```{r, scenarios}
 scenarioA <- valuable %>%
   take_subjects(M) %>%
   # Remove old stochastic values
@@ -1903,5 +1904,96 @@ tmp %>%
   ylab('Cost difference (million usd)') +
   coord_flip() +
   ggtitle('Broad prizes (per market entry)')
+```
+
+
+## Comparing resampled and predicted
+
+Quick comparison of resampled and predicted cost differences for the specific scenario outlined in the resampling section (for sanity checking purposes).
+
+```{r, ksalshfds, echo=FALSE, dependson=-1}
+predicted <- span %>%
+  unnest_legacy(data, pred_diff)  %>%
+  mutate(pred_go = pred_go * 100,
+         publ_inefficiency = publ_inefficiency * 100,
+         pred_diff = round(pred_diff / 10^6)) %>%
+  rename(diff = pred_diff) %>%
+  filter(pred_go == 95 & publ_inefficiency == 50) %>%
+  select(-pred_go, -publ_inefficiency)
+
+resampled <- scenarioA %>%
+  group_by(src, prize_phase) %>%
+  summarize(diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  mutate(diff = round(diff/10^6))
+
+
+predicted %>%
+  spread(prize_phase, diff) %>%
+  kable(caption='Predicted: diff per go-decision.')
+
+resampled %>%
+  spread(prize_phase, diff) %>%
+  kable(caption='Re-sampled: diff per go-decision.')
+
+bind_rows(predicted %>% mutate(type = 'predicted'),
+          resampled %>% mutate(type = 'resampled')) %>%
+ggplot(aes(as.numeric(prize_phase), diff, color=type)) +
+  facet_wrap(. ~ src, scale='free') +
+  geom_point() +
+  geom_line() +
+  ylab('Cost difference') +
+  theme(legend.position='top')
+```
+
+Black is resampled, red is predicted.
+Large black dot is mean, small black dot is median.
+
+```{r, lkhsdfksdhf, echo=FALSE, dependson=-1}
+predicted <- span %>%
+  unnest_legacy(data, pred_diff)  %>%
+  mutate(pred_go = pred_go * 100,
+         publ_inefficiency = publ_inefficiency * 100,
+         pred = round(pred_diff / 10^6)) %>%
+  filter(pred_go == 95 & publ_inefficiency == 50) %>%
+  select(-pred_go, -publ_inefficiency)
+
+resampled <- scenarioA %>%
+  group_by(src, prize_phase) %>%
+  mutate(inef_dir_enpv = inef_dir_enpv / 10^6,
+         ind_enpv = ind_enpv / 10^6) %>%
+  summarize(mean_resampled = mean(inef_dir_enpv - ind_enpv),
+            median_resampled = median(inef_dir_enpv - ind_enpv),
+            hi_resampled = mean_resampled + sd(inef_dir_enpv - ind_enpv),
+            lo_resampled = mean_resampled - sd(inef_dir_enpv - ind_enpv)
+            )
+
+merge(predicted, resampled) %>%
+  ggplot(aes(prize_phase, pred)) +
+  geom_pointrange(aes(ymin = lo_resampled,
+                     ymax = hi_resampled,
+                     y = mean_resampled)) +
+  geom_point(aes(y = median_resampled)) +
+  geom_point(color='red') +
+  facet_wrap(. ~ src, scale='free')
+```
+
+Let's look at the heatmap of CIAI and CUTI again since it appears that the last phase is not the most expensive phase, comparatively.
+
+```{r, fkhflsf, dependson=-1, echo=FALSE}
+for (curr in c('CIAI', 'CUTI')) {
+  p <- span %>%
+    filter(src == curr) %>%
+    unnest_legacy(data, pred_diff) %>%
+    ggplot(aes(pred_go*100, publ_inefficiency*100, z=pred_diff/10^6)) +
+    facet_wrap(. ~ prize_phase, nrow=1) +
+    geom_tile(aes(fill=pred_diff/10^6)) +
+    scale_fill_gradient2(low='blue', high='red', mid='white', name='Diff', breaks=pretty_breaks(n=7)) +
+    ylab('Public inefficiency') +
+    xlab('P(go)') +
+    ggtitle(curr) +
+    theme(legend.position = 'right',
+          panel.spacing = unit(1, 'mm'))
+  print(p)
+}
 ```
 
