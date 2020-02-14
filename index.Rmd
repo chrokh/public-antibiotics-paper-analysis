@@ -1202,7 +1202,7 @@ finals %>%
 We will only look at go-rates lower than `r go_lim_up=0.99; go_lim_up*100`%.
 Since a go-rate higher than 100% is not achievable, any prize size larger than the lowest size that yields a go-rate of 100% will also merely yield 100%.
 
-```{r, shkldflkjshsf, echo=FALSE}
+```{r, sxhkldflkjshsf, echo=FALSE}
 for (curr in unique(go_models$prize_phase)) {
   p <- go_models %>%
     filter(prize_phase == curr) %>%
@@ -1211,11 +1211,14 @@ for (curr in unique(go_models$prize_phase)) {
     filter(int_priv_enpv >= 0) %>%
     ggplot(aes(pred_go*100, -ind_enpv)) +
     geom_point(shape=1) +
-    geom_smooth(method='loess', se=FALSE, color='red') +
+    geom_smooth(method=lm, formula=y ~ splines::bs(x, 8), se=FALSE, color='red') +
     xlab('P(go)') +
     ylab('Indirect ENPV per entry\n(million usd)') +
-    scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
     scale_x_continuous(breaks = pretty_breaks(n=10)) +
+    scale_y_continuous(trans = 'log',
+                       breaks = c(1 %o% 10^(0:10)),
+                       minor_breaks = NULL,
+                       labels = trans_format('log10', math_format(10^.x))) +
     facet_wrap(. ~ src, scale='free') +
     ggtitle(sprintf('Intervened Private ENPV ≥ 0    Prize phase = %s    P(go) < %s', curr, go_lim_up)) +
     theme(legend.position = 'bottom')
@@ -1223,7 +1226,7 @@ for (curr in unique(go_models$prize_phase)) {
 }
 ```
 
-When smoothing the curves, phase wise "layering" again become obvious.
+Smoothing the curves we can more easily compare the expected costs of achieving a target P(go) between phases.
 
 ```{r, go-rate-vs-indirect-enpv-smooth, echo=FALSE}
 go_models %>%
@@ -1231,17 +1234,18 @@ go_models %>%
   filter(pred_go < go_lim_up) %>%
   filter(int_priv_enpv >= 0) %>%
   ggplot(aes(pred_go*100, -ind_enpv, color=prize_phase)) +
-  geom_smooth(method='loess', se=FALSE) +
+  geom_smooth(method=lm, formula=y ~ splines::bs(x, 8), se=FALSE) +
   scale_linetype_manual(values=c('dotted', 'solid')) +
   facet_wrap(. ~ src, scales='free') +
   xlab('P(go)') +
   ylab('Indirect ENPV\n(million usd)') +
   ggtitle('Intervened Private ENPV ≥ 0  (per go-decision)') +
-  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
   theme(legend.position = 'bottom', legend.title = element_blank())
 ```
-
-The layering remains, even when dividing the indirect ENPV of each project by the probability that it reaches the market.
 
 ```{r, go-rate-vs-exit, echo=FALSE}
 go_models %>%
@@ -1249,12 +1253,15 @@ go_models %>%
   filter(pred_go < go_lim_up) %>%
   filter(int_priv_enpv >= 0) %>%
   ggplot(aes(pred_go*100, -ind_enpv/prob_to, color=prize_phase)) +
-  geom_smooth(method='loess', se=FALSE) +
+  geom_smooth(method=lm, formula=y ~ splines::bs(x, 8), se=FALSE) +
   facet_wrap(. ~ src, scales='free', nrow=2) +
   xlab('P(go)') +
   ylab('Indirect ENPV\n(million usd)') +
   ggtitle('Intervened Private ENPV ≥ 0    (per market entry)') +
-  scale_y_continuous(label = unit_format(scale = 1e-6, unit = '')) +
+  scale_y_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
   theme(legend.position = 'bottom')
 ```
 
