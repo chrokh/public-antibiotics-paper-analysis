@@ -1297,8 +1297,6 @@ finals %>%
 
 ## Between-subject comparison
 
-Note the truncation of the right plots.
-
 ```{r, cost-difference-comparison, echo=FALSE}
 for (curr in unique(go_models$src)) {
   sub <- go_models %>%
@@ -1311,8 +1309,6 @@ for (curr in unique(go_models$src)) {
     ggplot(aes(pred_go*100, -ind_enpv/prob_to,
               group=prize_phase, color=prize_phase)) +
     geom_point(shape=20, alpha=0.5) +
-    geom_smooth(method='loess', se=FALSE) +
-    geom_line(stat='smooth', method='loess', color='black', alpha=0.2, size=1) +
     xlab('% no turned go') +
     ylab('Indirect ENPV per exit\n(million usd)') +
     scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
