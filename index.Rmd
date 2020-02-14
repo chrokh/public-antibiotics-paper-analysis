@@ -699,9 +699,7 @@ valuation <- function(df) {
     arrange(time_to) %>%
     # Valuation
     mutate(# Helpers
-           inef_time = time + time * publ_inefficiency,
            inef_cost = cost + cost * publ_inefficiency,
-           inef_time_to = cumsum(inef_time) - inef_time,
            prob_to = cumprod(prob) / prob,
            prize = ifelse(phase_year == 1 & phase == prize_phase, prize_size, 0),
            # Cashflow
@@ -792,7 +790,6 @@ final_valuation <- function(df) {
     select(-phase_year,
            -phase,
            -time,
-           -inef_time,
            -cost,
            -inef_cost,
            -sales,
