@@ -56,6 +56,8 @@ library(cowplot)
 library(broom)
 library(purrr)
 library(forcats)
+library(mgcv) # Non-parametric models (GAM)
+library(splines) # Non-parametric models (splines::bs)
 
 # Cache code chunks
 knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
@@ -951,7 +953,7 @@ Jitter plotting prize size and go-decisions suggests that logistic regression is
 ```{r, prize-vs-no-to-go, echo=FALSE}
 finals %>%
   filter(priv_enpv < 0) %>%
-  ggplot(aes(prize_size, int_priv_enpv >= 0)) +
+  ggplot(aes(prize_size, int_priv_enpv >= 0, color=src)) +
   geom_jitter(shape=1) +
   facet_grid(cols=vars(src), rows=vars(prize_phase)) +
   ylab('Go\n(Intervened Private ENPV ≥ 0)') +
@@ -1214,19 +1216,14 @@ for (curr in unique(go_models$prize_phase)) {
     geom_smooth(method=lm, formula=y ~ splines::bs(x, 8), se=FALSE, color='red') +
     xlab('P(go)') +
     ylab('Indirect ENPV per entry\n(million usd)') +
-    scale_x_continuous(breaks = pretty_breaks(n=10)) +
-    scale_y_continuous(trans = 'log',
-                       breaks = c(1 %o% 10^(0:10)),
-                       minor_breaks = NULL,
-                       labels = trans_format('log10', math_format(10^.x))) +
     facet_wrap(. ~ src, scale='free') +
-    ggtitle(sprintf('Intervened Private ENPV ≥ 0    Prize phase = %s    P(go) < %s', curr, go_lim_up)) +
+    ggtitle(sprintf('Prize phase = %s    Intervened Private ENPV ≥ 0     P(go) < %s', curr, go_lim_up)) +
     theme(legend.position = 'bottom')
   print(p)
 }
 ```
 
-Smoothing the curves we can more easily compare the expected costs of achieving a target P(go) between phases.
+Smoothing the curves and plotting log-log we can more easily compare the expected costs of achieving a target P(go) between phases.
 
 ```{r, go-rate-vs-indirect-enpv-smooth, echo=FALSE}
 go_models %>%
@@ -1240,6 +1237,10 @@ go_models %>%
   xlab('P(go)') +
   ylab('Indirect ENPV\n(million usd)') +
   ggtitle('Intervened Private ENPV ≥ 0  (per go-decision)') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      minor_breaks = NULL,
@@ -1258,6 +1259,10 @@ go_models %>%
   xlab('P(go)') +
   ylab('Indirect ENPV\n(million usd)') +
   ggtitle('Intervened Private ENPV ≥ 0    (per market entry)') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(0:10)),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
   scale_y_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(0:10)),
                      minor_breaks = NULL,
@@ -1295,236 +1300,504 @@ finals %>%
 ```
 
 
-## Between-subject comparison
+## Probability of preferable direct
+Predicting whether direct is cheaper than indirect, let's call it P(direct), at no public inefficiency.
 
-```{r, cost-difference-comparison, echo=FALSE}
-for (curr in unique(go_models$src)) {
-  sub <- go_models %>%
-    filter(src == curr) %>%
-    unnest_legacy(data, pred_go) %>%
-    filter(pred_go < go_lim_up) %>%
-    filter(int_priv_enpv >= 0)
+```{r, direct_preferble_jitter, echo=FALSE}
+go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  mutate(dir = (dir_enpv - ind_enpv) > 0) %>%
+  ggplot(aes(pred_go, dir, color=src)) +
+    facet_grid(cols=vars(src), rows=vars(prize_phase)) +
+    geom_jitter(shape=1) +
+    xlab('P(go)') +
+    ylab('P(direct)') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1),
+          legend.position = 'none')
+```
 
-  p1 <- sub %>%
-    ggplot(aes(pred_go*100, -ind_enpv/prob_to,
-              group=prize_phase, color=prize_phase)) +
-    geom_point(shape=20, alpha=0.5) +
-    xlab('% no turned go') +
-    ylab('Indirect ENPV per exit\n(million usd)') +
-    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
-    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
-                       breaks = scales::pretty_breaks(n = 8)) +
-    theme(legend.position = 'bottom') +
-    ggtitle('Indirect funding')
+```{r, dir_models}
+dir_model_logit <- function (df)
+  glm((dir_enpv - ind_enpv) > 0 ~ pred_go, data = df, family = binomial(link='logit'))
 
-  p2 <- sub %>%
-    ggplot(aes(publ_inefficiency*100, -inef_dir_enpv/prob_to)) +
-    geom_point(shape=20, color='darkgrey', alpha=0.6) +
-    geom_line(stat='smooth', method='lm', size=1, color='red') +
-    xlab('Public inefficiency (%)') +
-    ylab('Direct ENPV per exit\n(million usd)') +
-    scale_y_continuous(label = unit_format(scale = 1e-6, unit = ''),
-                       breaks = scales::pretty_breaks(n = 8),
-                       position='right'
-                       ) +
-    theme(legend.position = 'none') +
-    ggtitle('Direct funding')
+dir_models <- go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  # Only compare cost diff in projs with go-deciison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(dir_fit = map(data, dir_model_logit),
+         pred_dir = map2(dir_fit, data, predict_response),
+         tidied_dir = map(dir_fit, tidy)) %>%
+  ungroup
+```
 
-  # Sync y axis
-  p1y <- ggplot_build(p1)$layout$panel_scales_y[[1]]$range$range
-  p2y <- ggplot_build(p2)$layout$panel_scales_y[[1]]$range$range
-  p1 <- p1 + coord_cartesian(ylim = range(p1y))
-  p2 <- p2 + coord_cartesian(ylim = range(p1y))
+```{r, plot_dir_models, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest_legacy(data, pred_dir) %>%
+  ggplot(aes(pred_go, pred_dir, color=prize_phase)) +
+    geom_line() +
+    facet_wrap(. ~ src) +
+    xlab('P(go)') +
+    ylab('P(direct)') +
+    labs(color = 'Prize phase') +
+    scale_x_continuous(breaks = pretty_breaks(n=8)) +
+    scale_y_continuous(breaks = pretty_breaks(n=11)) +
+    coord_cartesian(xlim = c(0.3, 1)) +
+    theme_minimal() +
+    theme(legend.position = 'top')
+```
 
-  #print(plot_grid(p1, p2, ncol=2, align='h', axis='bt', rel_widths=c(1.8,1)))
-  ggarrange(p1, p2, ncol=2, nrow=1, widths=c(1.8, 1), common.legend=TRUE, legend='top') %>%
-    annotate_figure(top = curr) %>%
-    print
+P-values:
+```{r, dir_models_p, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest(tidied_dir) %>%
+  select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value)
+```
+
+Coefficients:
+```{r, dir_models_coef, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest(tidied_dir) %>%
+  select(src, prize_phase, term, estimate) %>%
+  spread(prize_phase, estimate) %>% kable
+```
+
+```{r, dir_models_ends, echo=FALSE, dependson=-1}
+ps <- dir_models %>% unnest(tidied_dir) %>% select(p.value)
+preds <- dir_models %>% unnest(pred_dir) %>% select(pred_dir)
+```
+
+Highest and lowest p-values are `r max(ps)` and `r min(ps)` respectively.
+
+Lowest and highest predicted values are `r min(preds)` and `r max(preds)` respectively.
+
+
+### Including public inefficiency
+```{r, dir_models_with_inef}
+dir_model_logit <- function (df)
+  glm((inef_dir_enpv - ind_enpv) > 0 ~ pred_go + publ_inefficiency, data = df, family = binomial(link='logit'))
+
+dir_models <- go_models %>%
+  unnest_legacy(data, pred_go) %>%
+  # Only compare cost diff in projs with go-deciison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(dir_fit = map(data, dir_model_logit),
+         pred_dir = map2(dir_fit, data, predict_response),
+         tidied_dir = map(dir_fit, tidy)) %>%
+  ungroup
+```
+
+```{r, plot_dir_models_with_inef, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest_legacy(data, pred_dir) %>%
+  ggplot(aes(pred_go, pred_dir, color=prize_phase)) +
+    geom_point(shape=1) +
+    facet_wrap(. ~ src) +
+    xlab('P(go)') +
+    ylab('P(direct)') +
+    labs(color = 'Prize phase') +
+    scale_x_continuous(breaks = pretty_breaks(n=8)) +
+    scale_y_continuous(breaks = pretty_breaks(n=11)) +
+    coord_cartesian(xlim = c(0.3, 1)) +
+    theme_minimal() +
+    theme(legend.position = 'top')
+```
+
+P-values:
+```{r, dir_models_with_inef_p, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest(tidied_dir) %>%
+  select(src, prize_phase, term, p.value) %>%
+  spread(prize_phase, p.value)
+```
+
+Coefficients:
+```{r, dir_models_with_inef_coef, echo=FALSE, dependson=-1}
+dir_models %>%
+  unnest(tidied_dir) %>%
+  select(src, prize_phase, term, estimate) %>%
+  spread(prize_phase, estimate) %>% kable
+```
+
+```{r, dir_models_with_inef_ends, echo=FALSE, dependson=-1}
+ps <- dir_models %>% unnest(tidied_dir) %>% select(p.value)
+preds <- dir_models %>% unnest(pred_dir) %>% select(pred_dir)
+```
+
+Highest and lowest p-values are `r max(ps)` and `r min(ps)` respectively.
+
+Lowest and highest predicted values are `r min(preds)` and `r max(preds)` respectively.
+
+Prepare function for predicting P(go) from inefficiency and target P(direct):
+```{r, dir_models_backwards_pred, dependson=-1}
+tidied_dir_models <- dir_models %>%
+  select(src, prize_phase, tidied_dir) %>%
+  unnest(tidied_dir)
+
+predict_p_go_from_prob_and_inef <- function(s, p, x2, y) {
+  sub <- filter(tidied_dir_models, src==s & prize_phase==p)
+  b0 <- filter(sub, term=='(Intercept)')$estimate
+  b1 <- filter(sub, term=='pred_go')$estimate
+  b2 <- filter(sub, term=='publ_inefficiency')$estimate
+  (log(y / (1-y)) - b0 - b2 * x2) / b1
 }
 ```
 
-
-## Binned difference
-TODO: Should this be removed now that we have the resampled scenarios section?
-
-```{r, kljhsdkjlhlsdkhgk, echo=FALSE}
-go_models %>%
-  unnest_legacy(data, pred_go) %>%
-  filter(int_priv_enpv >= 0) %>%
-  filter(pred_go >= 0.94) %>%
-  filter(pred_go <= 0.99) %>%
-  mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
-  ggplot(aes(publ_inefficiency * 100,
-             (inef_dir_enpv - ind_enpv)/10^6,
-             color=prize_phase)) +
-    ggtitle(sprintf('%s  p(go) = [0.94, 0.99]', '')) +
-    ylab('Difference in favor of direct (million usd per go-decision)') +
-    geom_smooth(method='lm', se=FALSE) +
-    facet_wrap(. ~ src, nrow=1) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1),
-          legend.position = 'bottom')
+### Heatmaps
+Generate independent variables.
+```{r, dir_models_new_df, dependson=-1}
+steps <- 100
+x <- data.frame(pred_go = seq(0, 1, length.out=steps))
+y <- data.frame(publ_inefficiency = seq(public_inefficiency_min,
+                                        public_inefficiency_max,
+                                        length.out=steps))
+variations <- merge(x, y) # Cartesian product
 ```
 
-### Per phase
-```{r, within-subject-high-go-rates-per-phase, echo=FALSE}
-for (curr in unique(finals$prize_phase)) {
-  p <- go_models %>%
+Predict dependent variable.
+```{r, dir_models_new_df_pred, dependson=-1}
+span <- dir_models %>%
+  select(src, prize_phase, dir_fit) %>%
+  unique %>%
+  mutate(data = list(variations),
+         pred_dir = map2(dir_fit, data, predict_response)) %>%
+  unnest_legacy(data, pred_dir)
+```
+
+Find what P(go) yields P(direct) = `r target_dir=0.5; target_dir` under various inefficiencies.
+```{r, backwards_predict_when_ind_and_dir_is_even, dependson=-1}
+steps <- 10
+evens <-
+  merge(intervention_phase_dist, data.frame(src = INDICATIONS)) %>%
+  merge(., data.frame(publ_inefficiency = seq(0, 1, length.out=steps))) %>%
+  mutate(pred_dir = target_dir) %>%
+  mutate(pred_pred_go = mapply(predict_p_go_from_prob_and_inef, src, prize_phase, publ_inefficiency, pred_dir))
+```
+
+```{r, dir_models_heatmaps, dependson=-1, echo=FALSE}
+for (curr in unique(span$prize_phase)) {
+  p <- span %>%
     filter(prize_phase == curr) %>%
-    unnest_legacy(data, pred_go) %>%
-    filter(int_priv_enpv >= 0) %>%
-    filter(pred_go >= 0.91) %>%
-    filter(pred_go <= 0.99) %>%
-    mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
-    ggplot(aes(publ_inefficiency * 100,
-              (inef_dir_enpv - ind_enpv)/10^6)) +
-    ggtitle(sprintf('%s    P(go) = [0.91, 0.99]', curr)) +
-    ylab('Difference in favor of direct (million usd per go-decision)') +
-    geom_point(aes(color=favorable)) +
-    geom_smooth(method='lm', se=FALSE, color='black') +
-    facet_wrap(. ~ src, nrow=1) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    ggplot(aes(pred_go, publ_inefficiency, z=pred_dir)) +
+      facet_wrap(. ~ src) +
+      geom_tile(aes(fill=pred_dir)) +
+      scale_fill_gradient2(low='coral3', high='dodgerblue3', mid='white', midpoint=0.5,
+                           name='P(direct)', breaks=pretty_breaks(n=7)) +
+      geom_line(data = filter(evens, prize_phase==curr),
+                aes(pred_pred_go, publ_inefficiency), linetype='dotted', color='black') +
+      ylab('Public inefficiency') +
+      xlab('P(go)') +
+      ggtitle(curr) +
+      scale_x_continuous(breaks = pretty_breaks(n=5)) +
+      coord_cartesian(xlim = c(0.5, 1)) +
+      theme(legend.position = 'right',
+        panel.spacing = unit(1, 'mm'))
   print(p)
 }
 ```
 
-### Combined
+### Breakpoints
+At what combination of P(go) and inefficiency is there no difference between direct and indirect?
 
-```{r, hsdkjfhslhskdfgkc, echo=FALSE}
-go_models %>%
-  unnest_legacy(data, pred_go) %>%
-  filter(int_priv_enpv >= 0) %>%
-  filter(pred_go >= 0.91) %>%
-  filter(pred_go <= 0.99) %>%
-  mutate(favorable = ifelse(inef_dir_enpv > ind_enpv, 'Direct', 'Indirect')) %>%
-  ggplot(aes(publ_inefficiency * 100,
-             (inef_dir_enpv - ind_enpv)/10^6)) +
-  ggtitle('all datasets  P(go) = [0.91, 0.99]') +
-  ylab('Difference in favor of direct (million usd per go-decision)') +
-  geom_point(aes(color=favorable)) +
-  geom_smooth(method='lm', se=FALSE, color='black') +
+Caption:
+Given some public inefficiency (X), what is the maximum P(go) (Y) that a prize can target before direct funding is equally likely to be cheaper, i.e. before P(direct) = 50\%.
+At P(go) below this point indirect funding is likely to be cheaper, and above this point direct funding is likely to be cheaper.
+
+```{r, dklsdhfsdf, echo=FALSE, dependson=-1}
+evens %>%
+  ggplot(aes(publ_inefficiency, pred_pred_go, color=src)) +
+  geom_line() +
   facet_wrap(. ~ prize_phase, nrow=1) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  labs(color = '') +
+  ylab('P(go)') +
+  xlab('Public inefficiency') +
+  scale_x_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_minimal() +
+  theme(legend.position = 'top',
+        axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        panel.border = element_rect(color = 'grey', fill = NA, size = 0.5),
+        panel.spacing = unit(0.9, 'lines')
+        )
+
+ggsave(file = './_figures/predict-dir-1.eps', plot = last_plot())
+
+evens %>%
+  ggplot(aes(publ_inefficiency, pred_pred_go, color=prize_phase)) +
+  geom_line() +
+  facet_wrap(. ~ src) +
+  labs(color = '') +
+  ylab('P(go)') +
+  xlab('Public inefficiency') +
+  scale_x_continuous(breaks = pretty_breaks(n = 11)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  theme_minimal() +
+  theme(legend.position = 'top',
+        axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        panel.border = element_rect(color = 'grey', fill = NA, size = 0.5),
+        panel.spacing = unit(0.9, 'lines')
+        )
+
+ggsave(file = './_figures/predict-dir-2.eps', plot = last_plot())
 ```
 
-### Point estimated inefficiency
 
-```{r, sdfhsdflg, echo=FALSE}
-tmp <- go_models %>%
-  unnest_legacy(data, pred_go) %>%
+
+## Cost difference (parametric)
+Flip P(go) to P(no) and build power law model.
+
+TODO: Also try logit in glm with `log(diff_norm) ~ pred_go`.
+
+TODO: Would it be better for the non-linear models to actually include very high P(go) and not filter them out as I now do?
+
+Build models:
+```{r, diff_models_parametric}
+# Normalization
+nmin <- function (xs)
+  min(xs) + 1
+normalize <- function(x, xs)
+  (x + abs(nmin(xs))) / (max(xs) - nmin(xs))
+denormalize <- function(x, xs)
+  (x * (max(xs) - nmin(xs)) - abs(nmin(xs)))
+
+# Model: power law
+pwr_model <- function (df)
+  nls(diff_norm ~ a*pred_no^b, data=df,
+      start=list(a=1, b=-1),
+      control=nls.control(maxiter=1000))
+
+# Model: Linear in log-log
+lm_model <- function (df)
+  glm(log(diff_norm) ~ log(pred_no), data=df)
+```
+
+Apply models:
+```{r, diff_models_parametric_apply, dependson=-1}
+diff_models_parametric <- go_models %>%
+  unnest_legacy(pred_go, data) %>%
+  # Remove high P(go)
+  filter(pred_go <= go_lim_up) %>%
+  # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
-  filter(pred_go >= 0.91) %>%
-  filter(pred_go <= 0.99) %>%
-  filter(publ_inefficiency >= 0.3) %>%
-  filter(publ_inefficiency <= 0.4)
+  # Prepare independent variables
+  mutate(pred_no = 1 - pred_go, # P(no) = 1 - P(go)
+         diff = dir_enpv - ind_enpv,
+         diff_norm = normalize(diff, diff)) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(# Power law
+         diff_pwr_fit = map(data, pwr_model),
+         pred_diff_pwr = map2(diff_pwr_fit, data, predict_response),
+         tidied_diff_pwr = map(diff_pwr_fit, tidy),
+         # Linear in log-log
+         diff_lm_fit = map(data, lm_model),
+         pred_diff_lm = map2(diff_lm_fit, data, predict_response),
+         tidied_diff_lm = map(diff_lm_fit, tidy)) %>%
+  ungroup
 ```
 
-#### Per market entry
-```{r, aslkjdhfkjfd, echo=FALSE}
-tmp %>%
-  group_by(prize_phase, src) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to),
-            sd_diff   = sd(inef_dir_enpv/prob_to - ind_enpv/prob_to),
-            ymin      = mean_diff - sd_diff,
-            ymin2     = mean_diff - sd_diff * 2,
-            ymax      = mean_diff + sd_diff,
-            ymax2     = mean_diff + sd_diff * 2,
-            Favorable = ifelse(sum(inef_dir_enpv/prob_to) > sum(ind_enpv/prob_to),
-                               'Direct',
-                               'Indirect')) %>%
-  ggplot(aes(src, mean_diff/10^6, fill=Favorable)) +
-    geom_col() +
-    geom_linerange(color='red',
-                   aes(ymin=ifelse(ymin>=0, ymin/10^6, 0),
-                       ymax=ifelse(ymax>=0, ymax/10^6, 0))) +
-    geom_linerange(color='blue',
-                   aes(ymin=ifelse(ymin<=0, ymin/10^6, 0),
-                       ymax=ifelse(ymax<=0, ymax/10^6, 0))) +
-    facet_wrap(. ~ prize_phase, ncol=1, strip.position='right') +
-    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-    ylab('Mean cost-savings of direct funding per market entry (million usd)') +
-    xlab(element_blank()) +
-    coord_flip() +
-    ggtitle('P(go) = [0.91, 0.99]     Public inefficiency = [0.3, 0.4]     +/- 1sd') +
-    theme(legend.position = 'right',
-          panel.spacing = unit(1, 'mm'))
+### Model output
+```{r, diff_models_parametric_tables, echo=FALSE, dependson=-1}
+diff_models_parametric %>%
+  select(src, prize_phase, tidied_diff_pwr) %>%
+  unnest(tidied_diff_pwr) %>%
+  mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
+  kable(caption = 'Power law')
+
+diff_models_parametric %>%
+  select(src, prize_phase, tidied_diff_lm) %>%
+  unnest(tidied_diff_lm) %>%
+  mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
+  kable(caption = 'Linear in log-log')
 ```
 
-```{r, hlkjsdslkjdhfkjfd, echo=FALSE}
-tmp %>%
-  group_by(prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to),
-            Favorable = ifelse(sum(inef_dir_enpv/prob_to) > sum(ind_enpv/prob_to),
-                               'Direct',
-                               'Indirect')) %>%
-  mutate(prize_phase = factor(prize_phase, levels=rev(PHASES))) %>%
-  ggplot(aes(prize_phase, mean_diff/10^6, fill=Favorable)) +
-    geom_col() +
-    coord_flip() +
-    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-    ylab('Mean cost-savings of direct funding\nper market entry (million usd)') +
-    xlab(element_blank()) +
-    ggtitle('P(go)=[0.91, 0.99]  public inefficiency=[0.3, 0.4]\nAssumes prize size tailored per indication to avoid overpaying')
+### Plots
+```{r, diff_models_parametric_plots, echo=FALSE, dependson=-1}
+for (curr_src in unique(diff_models_parametric$src)) {
+  for (curr_ph in unique(diff_models_parametric$prize_phase)) {
+    sub <- diff_models_parametric %>%
+      filter(src == curr_src & prize_phase == curr_ph) %>%
+      unnest_legacy(data, pred_diff_lm, pred_diff_pwr)
+
+    p1 <- sub %>%
+      ggplot(aes(pred_no, denormalize(diff_norm, diff))) +
+      facet_wrap(prize_phase ~ src, scale='free') +
+      geom_point(aes(color=denormalize(diff_norm, diff) > 0)) +
+      geom_line(aes(y=denormalize(pred_diff_pwr, diff)), color='red') +
+      geom_line(aes(y=denormalize(exp(pred_diff_lm), diff)), color='blue') +
+      scale_x_continuous(breaks = pretty_breaks(n=11)) +
+      scale_y_continuous(breaks = pretty_breaks(n=11)) +
+      ylab('Cost difference') +
+      xlab('P(no)') +
+      ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+      theme(legend.position = 'none')
+
+    p2 <- sub %>%
+      ggplot(aes(pred_no, diff_norm)) +
+      facet_wrap(prize_phase ~ src, scale='free') +
+      geom_point(aes(color=diff_norm > 0)) +
+      geom_line(aes(y=pred_diff_pwr), color='red') +
+      geom_line(aes(y=exp(pred_diff_lm)), color='blue') +
+      scale_y_continuous(trans = 'log',
+                         breaks = c(1 %o% 10^(0:10)),
+                         minor_breaks = NULL,
+                         labels = trans_format('log10', math_format(10^.x))) +
+      scale_x_continuous(trans = 'log',
+                         breaks = c(1 %o% 10^(0:10)),
+                         minor_breaks = NULL,
+                         labels = trans_format('log10', math_format(10^.x))) +
+      ylab('Normalized cost difference') +
+      xlab('P(no)') +
+      ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+      theme(legend.position = 'none')
+
+    print(p1)
+    print(p2)
+  }
+}
 ```
 
-#### Per go-decision
-```{r, aslkjdhffd, echo=FALSE}
-tmp %>%
-  group_by(prize_phase, src) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv),
-            sd_diff   = sd(inef_dir_enpv - ind_enpv),
-            ymin      = mean_diff - sd_diff,
-            ymin2     = mean_diff - sd_diff * 2,
-            ymax      = mean_diff + sd_diff,
-            ymax2     = mean_diff + sd_diff * 2,
-            Favorable = ifelse(sum(inef_dir_enpv) > sum(ind_enpv),
-                               'Direct',
-                               'Indirect')) %>%
-  ggplot(aes(src, mean_diff/10^6, fill=Favorable)) +
-    geom_col() +
-    geom_linerange(color='red',
-                   aes(ymin=ifelse(ymin>=0, ymin/10^6, 0),
-                       ymax=ifelse(ymax>=0, ymax/10^6, 0))) +
-    geom_linerange(color='blue',
-                   aes(ymin=ifelse(ymin<=0, ymin/10^6, 0),
-                       ymax=ifelse(ymax<=0, ymax/10^6, 0))) +
-    facet_wrap(. ~ prize_phase, ncol=1, strip.position='right') +
-    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-    ylab('Mean cost-savings of direct funding per go-decision (million usd)') +
-    xlab(element_blank()) +
-    coord_flip() +
-    ggtitle('P(go) = [0.91, 0.99]     Public inefficiency = [0.3, 0.4]     +/- 1sd') +
-    theme(legend.position = 'right',
-          panel.spacing = unit(1, 'mm'))
+## Cost difference (non-parametric)
+TODO: Normalization causes zeroes. Normalize to [1,2] instead of [0,1]?
+
+Build models:
+```{r, diff_nonparametric_models}
+normalize <- function(x, xs)
+  (x + abs(min(xs))) / (max(xs) - min(xs))
+denormalize <- function(x, xs)
+  (x * (max(xs) - min(xs)) - abs(min(xs)))
+
+# Cubic spline?
+# https://datascienceplus.com/cubic-and-smoothing-splines-in-r/
+diff_model_spline <- function (df)
+  lm(diff_norm ~ bs(pred_go, knots=c(0.8, 0.95)), data=df)
+  # What works?
+  # (0.9)
+  # (0.8, 0.95)
+  # (0.8, 0.9, 0.95, 0.98)
+  # (0.8, 0.85, 0.9, 0.95, 0.965, 0.98) too much wiggle
+
+# Cubic spline?
+# https://datascienceplus.com/cubic-and-smoothing-splines-in-r/
+# TODO: No knots specified
+diff_model_logspline <- function (df)
+  lm(diff_norm ~ bs(log(pred_no), knots=c(log(0.8), log(0.95))), data=df)
+
+diff_model_gam <- function (df)
+  gam(diff_norm ~ s(pred_go), data=df, method='REML')
 ```
 
-```{r, asljkhdsskdf, echo=FALSE}
-tmp %>%
-  group_by(prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv),
-            Favorable = ifelse(sum(inef_dir_enpv) > sum(ind_enpv),
-                               'Direct',
-                               'Indirect')) %>%
-  mutate(prize_phase = factor(prize_phase, levels=rev(PHASES))) %>%
-  ggplot(aes(prize_phase, mean_diff/10^6, fill=Favorable)) +
-    geom_col() +
-    scale_y_continuous(breaks = scales::pretty_breaks(n = 12)) +
-    ylab('Mean cost-savings of direct funding per go-decision (million usd)') +
-    xlab(element_blank()) +
-    coord_flip() +
-    ggtitle('P(go)=[0.91, 0.99]  public inefficiency=[0.3, 0.4]\nAssumes prize size tailored per indication to avoid overpaying') +
-    theme(legend.position = 'right')
+Apply models:
+```{r, diff_nonparametrics_apply_models, dependson=-1}
+diff_models_nonparametric <- go_models %>%
+  unnest_legacy(pred_go, data) %>%
+  # Remove high P(go)
+  filter(pred_go <= go_lim_up) %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  # Prepare independent variables
+  mutate(pred_no = 1 - pred_go, # P(no) = 1 - P(go)
+         diff = dir_enpv - ind_enpv,
+         diff_norm = normalize(diff, diff)) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(# Spline
+         diff_spline_fit = map(data, diff_model_spline),
+         pred_diff_spline = map2(diff_spline_fit, data, predict_response),
+         tidied_diff_spline = map(diff_spline_fit, tidy),
+         # Spline in log-log
+         diff_logspline_fit = map(data, diff_model_logspline),
+         pred_diff_logspline = map2(diff_logspline_fit, data, predict_response),
+         tidied_diff_logspline = map(diff_logspline_fit, tidy),
+         # GAM
+         diff_gam_fit = map(data, diff_model_gam),
+         pred_diff_gam = map2(diff_gam_fit, data, predict_response),
+         tidied_diff_gam = map(diff_gam_fit, tidy)) %>%
+  ungroup
+```
+
+### Model output
+```{r, diff_model_nonparametric_tables, echo=FALSE}
+diff_models_nonparametric %>%
+  select(src, prize_phase, tidied_diff_spline) %>%
+  unnest_legacy(tidied_diff_spline) %>%
+  mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
+  kable(caption = 'Spline')
+
+diff_models_nonparametric %>%
+  select(src, prize_phase, tidied_diff_logspline) %>%
+  unnest_legacy(tidied_diff_logspline) %>%
+  mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
+  kable(caption = 'Spline in log-log')
+
+diff_models_nonparametric %>%
+  select(src, prize_phase, tidied_diff_gam) %>%
+  unnest_legacy(tidied_diff_gam) %>%
+  mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
+  kable(caption = 'GAM')
+```
+
+### Plots
+```{r, diff_model_nonparametric_figs, echo=FALSE}
+for (curr_src in unique(diff_models_nonparametric$src)) {
+  for (curr_ph in unique(diff_models_nonparametric$prize_phase)) {
+    sub <- diff_models_nonparametric %>%
+      unnest_legacy(data, pred_diff_spline, pred_diff_logspline, pred_diff_gam) %>%
+      filter(src == curr_src & prize_phase == curr_ph) %>%
+      # Remove high P(go) samples
+      filter(pred_go <= go_lim_up) %>%
+      # Only compare cost diff in projs with go-deciison after intervention
+      filter(int_priv_enpv >= 0)
+    p1 <- sub %>%
+      ggplot(aes(pred_go, diff_norm)) +
+      facet_wrap(prize_phase ~ src, scale='free') +
+      geom_point(aes(color=diff_norm > 0)) +
+      geom_line(aes(y=pred_diff_logspline), color='black', size=1) +
+      geom_line(aes(y=pred_diff_spline), color='yellow', linetype='dashed', size=1) +
+      geom_line(aes(y=pred_diff_gam), color='black', linetype='dotted', size=1) +
+      scale_x_continuous(breaks = pretty_breaks(n=11)) +
+      scale_y_continuous(trans = 'log',
+                         breaks = c(1 %o% 10^(0:10)),
+                         minor_breaks = NULL,
+                         labels = trans_format('log10', math_format(10^.x))) +
+      ylab('Cost difference') +
+      xlab('P(go)') +
+      ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+      theme(legend.position = 'none')
+    p2 <- sub %>%
+      ggplot(aes(1-pred_go, diff_norm)) +
+      facet_wrap(prize_phase ~ src, scale='free') +
+      geom_point(aes(color=diff_norm > 0)) +
+      geom_line(aes(y=pred_diff_logspline), color='black', size=1) +
+      geom_line(aes(y=pred_diff_spline), color='yellow', linetype='dashed', size=1) +
+      geom_line(aes(y=pred_diff_gam), color='black', linetype='dotted', size=1) +
+      scale_x_continuous(trans = 'log',
+                         breaks = c(1 %o% 10^(0:10)),
+                         minor_breaks = NULL,
+                         labels = trans_format('log10', math_format(10^.x))) +
+      scale_y_continuous(trans = 'log',
+                         breaks = c(1 %o% 10^(0:10)),
+                         minor_breaks = NULL,
+                         labels = trans_format('log10', math_format(10^.x))) +
+      ylab('Cost difference') +
+      xlab('P(no)') +
+      ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+      theme(legend.position = 'none')
+    print(p1)
+    print(p2)
+  }
+}
 ```
 
 
-## Predicting cost difference
 
-We can predict the cost difference between indirect and direct funding by building a linear model where public inefficiency and P(go) are independent variables.
-Note that since P(go) is predicted from prize size we could have used prize size as an independent variable but choose to use P(go) since it is a more meaningful model construct.
-Choosing P(go) over prize size also makes it significantly easier to compare cost differences across prize phases without having to correct for the effect of the phase of intervention.
+## Cost difference (linear)
 
-Note that it only makes sense to compare cost difference in projects that reach go-decisions (hence the filter below).
-Also note that we only consider prize sizes with a predicted P(go) < `r go_lim_up` to avoid nonlinearity in the prediction model, caused by the fact that prize sizes larger than the one needed for P(go) = 1 will still yield P(go) = 1.
+NOTE: This is the old cost difference prediction from before I realized that indirect ENPV is non-linearly correlated to P(go).
 
 ```{r, lkjkj1hghjk}
 diff_model <- function(df)
@@ -1537,7 +1810,7 @@ diff_models <- go_models %>%
   unnest_legacy(data, pred_go) %>%
   # Only compare cost diff in projs with go-deciison after intervention
   filter(int_priv_enpv >= 0) %>%
-  # Ignore prize sizes that cause P(go) ~ 100
+  # Remove large P(go)
   filter(pred_go < go_lim_up) %>%
   group_by(src, prize_phase) %>%
   nest %>%
@@ -1610,6 +1883,7 @@ diff_models %>%
   unnest_legacy(pred_diff, data) %>%
   ggplot(aes(pred_go, pred_diff)) +
   geom_point(shape=1) +
+  geom_point(aes(y = inef_dir_enpv - ind_enpv), color='red', shape=1, alpha=0.5) +
   facet_wrap(prize_phase ~ src, scale='free') +
   theme(legend.position = 'none',
         axis.text.x = element_blank(),
@@ -1667,7 +1941,7 @@ diff_models %>%
 ```
 
 
-## Difference heatmap
+### Difference heatmap
 Using the above model we can generate a dataset of independent variables spanning the full range from 0 to 1 and then predict the cost difference for all points.
 From this dataset and its predictions we can begin exploring these three-dimensional relationships.
 
@@ -1695,7 +1969,7 @@ span <- diff_models %>%
 
 The predictions yield the following heatmaps.
 
-### Go-decision heatmaps
+#### Go-decision heatmaps
 ```{r, jkhflsf, dependson=-1, echo=FALSE}
 for (curr in unique(tmp$prize_phase)) {
   p <- span %>%
@@ -1715,7 +1989,7 @@ for (curr in unique(tmp$prize_phase)) {
 }
 ```
 
-### Market entry heatmaps
+#### Market entry heatmaps
 ```{r, jkhflsf2, dependson=-1, echo=FALSE}
 for (curr in unique(tmp$prize_phase)) {
   p <- span %>%
@@ -1735,8 +2009,8 @@ for (curr in unique(tmp$prize_phase)) {
 }
 ```
 
-## Difference tables
-### Go-decision diff tables
+### Difference tables
+#### Go-decision diff tables
 ```{r, sdfkjlhsdfg, dependson=-1, echo=FALSE, results='asis'}
 for (curr_phase in c('M1')) {
   for (curr_src in unique(span$src)) {
@@ -1758,7 +2032,7 @@ for (curr_phase in c('M1')) {
 }
 ```
 
-### Market entry diff tables
+#### Market entry diff tables
 ```{r, sdfkjlhsdfg2, dependson=-1, echo=FALSE, results='asis'}
 for (curr_phase in c('M1')) {
   for (curr_src in unique(span$src)) {
@@ -1907,9 +2181,11 @@ tmp %>%
 ```
 
 
-## Comparing resampled and predicted
+## Comparing resampled and predicted (linear)
 
 Quick comparison of resampled and predicted cost differences for the specific scenario outlined in the resampling section (for sanity checking purposes).
+
+TODO: Should also compare to the non-linear models outputs.
 
 ```{r, ksalshfds, echo=FALSE, dependson=-1}
 predicted <- span %>%
@@ -1925,7 +2201,6 @@ resampled <- scenarioA %>%
   group_by(src, prize_phase) %>%
   summarize(diff = mean(inef_dir_enpv - ind_enpv)) %>%
   mutate(diff = round(diff/10^6))
-
 
 predicted %>%
   spread(prize_phase, diff) %>%
