@@ -1005,7 +1005,7 @@ go_models %>%
   xlab('Prize size') +
   theme_minimal() +
   theme(legend.position = 'top') +
-  labs(color = 'Prize phase') +
+  labs(color = '') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(seq(0,10,2))),
                      labels = trans_format('log10', math_format(10^.x))) +
@@ -1135,18 +1135,23 @@ tmp %>%
 
 
 ### Effective prize sizes{#effective-prize-sizes}
-Using our function that solves for prize size from a given probability of go we can predict what prize sizes are required to achive a target probability of go of `r target=0.95; target*100`% in each of the sources?
 
-```{r, klhjsdfkdf}
+```{r, effectives_target, echo=FALSE}
+target_p_go <- 0.9
+```
+
+Using our function that solves for prize size from a given probability of go we can predict what prize sizes are required to achive a target probability of go of `r target_p_go*100`% in each of the sources?
+
+```{r, effectives, dependson='effectives_target'}
 effectives <- tidied %>%
   group_by(src, prize_phase) %>%
   nest %>%
-  mutate(pred_prize_size = map2_dbl(data, target, predict_prize_from_prob)) %>%
+  mutate(pred_prize_size = map2_dbl(data, target_p_go, predict_prize_from_prob)) %>%
   select(-data) %>%
   ungroup
 ```
 
-```{r, alslflhjsdfkjhs, echo=FALSE}
+```{r, alslflhjsdfkjhs, echo=FALSE, dependson=-1}
 effectives %>%
   ggplot(aes(src, pred_prize_size/10^6, fill=src)) +
   geom_col(position='dodge') +
@@ -1156,13 +1161,13 @@ effectives %>%
   xlab(element_blank()) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1),
         legend.position = 'none') +
-  ggtitle(sprintf('P(go) = %s%%', target*100))
+  ggtitle(sprintf('P(go) = %s%%', target_p_go*100))
 ```
 
-If prizes are not targeted by indication we must choose the highest prize to ensure a minimum of `r target*100`% go-decisions for all indications.
+If prizes are not targeted by indication we must choose the highest prize to ensure a minimum of `r target_p_go*100`% go-decisions for all indications.
 Hence the "max" row.
 
-```{r, hjklfsdf, echo=FALSE}
+```{r, hjklfsdf, echo=FALSE, dependson=-1}
 effectives %>%
   group_by(prize_phase) %>%
   mutate(src = '(max)') %>%
@@ -1171,7 +1176,7 @@ effectives %>%
   rbind(effectives, .) %>%
   mutate(pred_prize_size = round(pred_prize_size / 10^6)) %>%
   spread(prize_phase, pred_prize_size) %>%
-  kable(caption=sprintf('Million usd (rounded). P(go) = %s%%.', target*100))
+  kable(caption=sprintf('Million usd (rounded). P(go) = %s%%.', target_p_go*100))
 ```
 
 
@@ -2073,7 +2078,7 @@ take_subjects <- function(df, m)
 We construct two scenarios, A and B, where the prize size in A is indication and phase specific, and the prize size in B is the largest effective prize size for that phase (i.e. only phase specific).
 Scenario B thus models the idea of not targeting interventions but still choosing a known effective prize size.
 
-```{r, scenarios}
+```{r, scenarios, dependson='effectives'}
 scenarioA <- valuable %>%
   take_subjects(M) %>%
   # Remove old stochastic values
@@ -2106,7 +2111,8 @@ scenarioB <- valuable %>%
   final_valuation
 ```
 
-```{r, ljhfsk, dependson=-1, echo=FALSE, results='asis'}
+```{r, scenarios_tables_and_figs, dependson=-1, echo=FALSE, results='asis'}
+
 tmp <- scenarioA %>%
   group_by(src, prize_phase) %>%
   summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
@@ -2194,7 +2200,7 @@ predicted <- span %>%
          publ_inefficiency = publ_inefficiency * 100,
          pred_diff = round(pred_diff / 10^6)) %>%
   rename(diff = pred_diff) %>%
-  filter(pred_go == 95 & publ_inefficiency == 50) %>%
+  filter(pred_go == target_p_go * 100 & publ_inefficiency == 50) %>%
   select(-pred_go, -publ_inefficiency)
 
 resampled <- scenarioA %>%
@@ -2229,7 +2235,7 @@ predicted <- span %>%
   mutate(pred_go = pred_go * 100,
          publ_inefficiency = publ_inefficiency * 100,
          pred = round(pred_diff / 10^6)) %>%
-  filter(pred_go == 95 & publ_inefficiency == 50) %>%
+  filter(pred_go == target_p_go * 100 & publ_inefficiency == 50) %>%
   select(-pred_go, -publ_inefficiency)
 
 resampled <- scenarioA %>%
