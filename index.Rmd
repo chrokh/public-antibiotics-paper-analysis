@@ -1666,8 +1666,11 @@ for (curr_src in unique(diff_models_parametric$src)) {
 }
 ```
 
+
 ## Cost difference (non-parametric)
 TODO: Normalization causes zeroes. Normalize to [1,2] instead of [0,1]?
+
+TODO: Spline log model does not log y. Since the correlation is almost linear on log-log I should definitely try log-y.
 
 Build models:
 ```{r, diff_nonparametric_models}
@@ -1705,6 +1708,7 @@ diff_models_nonparametric <- go_models %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
   # Prepare independent variables
+  # NOTE: Normalize across groups so denormalization must also happen across.
   mutate(pred_no = 1 - pred_go, # P(no) = 1 - P(go)
          diff = dir_enpv - ind_enpv,
          diff_norm = normalize(diff, diff)) %>%
@@ -1714,7 +1718,7 @@ diff_models_nonparametric <- go_models %>%
          diff_spline_fit = map(data, diff_model_spline),
          pred_diff_spline = map2(diff_spline_fit, data, predict_response),
          tidied_diff_spline = map(diff_spline_fit, tidy),
-         # Spline in log-log
+         # Spline in log
          diff_logspline_fit = map(data, diff_model_logspline),
          pred_diff_logspline = map2(diff_logspline_fit, data, predict_response),
          tidied_diff_logspline = map(diff_logspline_fit, tidy),
@@ -1737,7 +1741,7 @@ diff_models_nonparametric %>%
   select(src, prize_phase, tidied_diff_logspline) %>%
   unnest_legacy(tidied_diff_logspline) %>%
   mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
-  kable(caption = 'Spline in log-log')
+  kable(caption = 'Spline in log')
 
 diff_models_nonparametric %>%
   select(src, prize_phase, tidied_diff_gam) %>%
@@ -1796,6 +1800,44 @@ for (curr_src in unique(diff_models_nonparametric$src)) {
     print(p2)
   }
 }
+```
+
+### Combined plots
+```{r, diff_model_nonparametric_combined_figs, echo=FALSE}
+sub <- diff_models_nonparametric %>%
+  unnest_legacy(data, pred_diff_spline, pred_diff_logspline, pred_diff_gam) %>%
+  mutate(pred_diff_logspline_denorm = denormalize(pred_diff_logspline, diff))
+p1 <- sub %>%
+  ggplot(aes(pred_no, pred_diff_logspline, color=prize_phase)) +
+  facet_wrap(. ~ src) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = 10^(-2:0),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(trans = 'log',
+                     breaks = 10^(-2:0),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  ylab('Cost difference') +
+  xlab('P(no)') +
+  ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+  theme_minimal() +
+  theme(legend.position = 'top')
+print(p1)
+p2 <- sub %>% ggplot(aes(pred_no, pred_diff_logspline_denorm, color=prize_phase)) +
+  facet_wrap(. ~ src) +
+  geom_line() +
+  scale_x_continuous(trans = 'log',
+                     breaks = 10^(-2:0),
+                     minor_breaks = NULL,
+                     labels = trans_format('log10', math_format(10^.x))) +
+  ylab('Cost difference') +
+  xlab('P(no)') +
+  ggtitle(sprintf('Filter: P(go) <= %s', go_lim_up)) +
+  theme_minimal() +
+  theme(legend.position = 'top')
+print(p2)
 ```
 
 
