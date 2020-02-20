@@ -1439,15 +1439,10 @@ Lowest and highest predicted values are `r min(preds)` and `r max(preds)` respec
 
 Prepare function for predicting P(go) from inefficiency and target P(direct):
 ```{r, dir_models_backwards_pred, dependson=-1}
-tidied_dir_models <- dir_models %>%
-  select(src, prize_phase, tidied_dir) %>%
-  unnest(tidied_dir)
-
-predict_p_go_from_prob_and_inef <- function(s, p, x2, y) {
-  sub <- filter(tidied_dir_models, src==s & prize_phase==p)
-  b0 <- filter(sub, term=='(Intercept)')$estimate
-  b1 <- filter(sub, term=='pred_go')$estimate
-  b2 <- filter(sub, term=='publ_inefficiency')$estimate
+predict_p_go_from_prob_and_inef <- function(tidied, x2, y) {
+  b0 <- filter(tidied, term=='(Intercept)')$estimate
+  b1 <- filter(tidied, term=='pred_go')$estimate
+  b2 <- filter(tidied, term=='publ_inefficiency')$estimate
   (log(y / (1-y)) - b0 - b2 * x2) / b1
 }
 ```
@@ -1476,11 +1471,19 @@ span <- dir_models %>%
 Find what P(go) yields P(direct) = `r target_dir=0.5; target_dir` under various inefficiencies.
 ```{r, backwards_predict_when_ind_and_dir_is_even, dependson=-1}
 steps <- 10
-evens <-
-  merge(intervention_phase_dist, data.frame(src = INDICATIONS)) %>%
-  merge(., data.frame(publ_inefficiency = seq(0, 1, length.out=steps))) %>%
-  mutate(pred_dir = target_dir) %>%
-  mutate(pred_pred_go = mapply(predict_p_go_from_prob_and_inef, src, prize_phase, publ_inefficiency, pred_dir))
+variations <-
+  merge(data.frame(src = INDICATIONS),
+        data.frame(publ_inefficiency = seq(0, 1, length.out=steps)))
+evens <- dir_models %>%
+  select(src, prize_phase, tidied_dir) %>%
+  unnest(tidied_dir) %>%
+  merge(., variations) %>%
+  group_by(src, prize_phase, publ_inefficiency) %>%
+  nest %>%
+  mutate(pred_pred_go = mapply(predict_p_go_from_prob_and_inef, data, publ_inefficiency, target_dir)) %>%
+  unnest(pred_pred_go) %>%
+  ungroup %>%
+  mutate(pred_dir = target_dir) # Needed for z in heatmaps
 ```
 
 ```{r, dir_models_heatmaps, dependson=-1, echo=FALSE}
