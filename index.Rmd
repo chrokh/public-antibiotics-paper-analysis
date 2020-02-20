@@ -1004,7 +1004,9 @@ go_models %>%
   ylab('P(go)') +
   xlab('Prize size') +
   theme_minimal() +
-  theme(legend.position = 'top') +
+  theme(legend.position = 'top',
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0))) +
   labs(color = '') +
   scale_x_continuous(trans = 'log',
                      breaks = c(1 %o% 10^(seq(0,10,2))),
@@ -1528,11 +1530,14 @@ evens %>%
   theme_minimal() +
   theme(legend.position = 'top',
         axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         panel.border = element_rect(color = 'grey', fill = NA, size = 0.5),
         panel.spacing = unit(0.9, 'lines')
-        )
+        ) +
+  guides(color = guide_legend(nrow = 1))
 
-ggsave(file = './_figures/predict-dir-1.eps', plot = last_plot())
+ggsave(file = './_figures/predict-dir.eps', plot = last_plot())
 
 evens %>%
   ggplot(aes(publ_inefficiency, pred_pred_go, color=prize_phase)) +
@@ -1546,11 +1551,13 @@ evens %>%
   theme_minimal() +
   theme(legend.position = 'top',
         axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         panel.border = element_rect(color = 'grey', fill = NA, size = 0.5),
         panel.spacing = unit(0.9, 'lines')
         )
 
-ggsave(file = './_figures/predict-dir-2.eps', plot = last_plot())
+ggsave(file = './_figures/predict-dir-per-src.eps', plot = last_plot())
 ```
 
 
