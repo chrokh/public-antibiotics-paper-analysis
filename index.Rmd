@@ -1626,14 +1626,17 @@ for (curr_src in unique(diff_models_parametric$src)) {
   for (curr_ph in unique(diff_models_parametric$prize_phase)) {
     sub <- diff_models_parametric %>%
       filter(src == curr_src & prize_phase == curr_ph) %>%
-      unnest_legacy(data, pred_diff_lm, pred_diff_pwr)
+      unnest_legacy(data, pred_diff_lm, pred_diff_pwr) %>%
+      mutate(diff_denorm = denormalize(diff_norm, diff),
+             pred_diff_pwr_denorm = denormalize(pred_diff_pwr, diff),
+             pred_diff_lm_denorm = denormalize(exp(pred_diff_lm), diff))
 
     p1 <- sub %>%
-      ggplot(aes(pred_no, denormalize(diff_norm, diff))) +
+      ggplot(aes(pred_no, diff_denorm)) +
       facet_wrap(prize_phase ~ src, scale='free') +
-      geom_point(aes(color=denormalize(diff_norm, diff) > 0)) +
-      geom_line(aes(y=denormalize(pred_diff_pwr, diff)), color='red') +
-      geom_line(aes(y=denormalize(exp(pred_diff_lm), diff)), color='blue') +
+      geom_point(aes(color=diff_denorm > 0)) +
+      geom_line(aes(y=pred_diff_pwr_denorm), color='red') +
+      geom_line(aes(y=pred_diff_lm_denorm), color='blue') +
       scale_x_continuous(breaks = pretty_breaks(n=11)) +
       scale_y_continuous(breaks = pretty_breaks(n=11)) +
       ylab('Cost difference') +
