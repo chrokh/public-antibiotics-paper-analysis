@@ -86,6 +86,9 @@ p_lower_than <- function(p)
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
 MARKET_PHASES <- paste('M', 1:20, sep='')
 PHASES <- c(DEVELOPMENT_PHASES, MARKET_PHASES)
+
+# Formatting functions
+sci <- function (d) format(d, scientific=TRUE)
 ```
 
 The data in this study stem from Sertkaya et. al (2014), who presents data for hypothetical antibiotics targeting six different indications.
@@ -1036,9 +1039,13 @@ ends <- tidied %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   summarize(max = max(p.value),
             min = min(p.value))
+
+ps <- tidied %>% select(p.value)
 ```
 
 Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
+
+Highest p-value is `r sci(max(ps))` and lowest is `r sci(min(ps))`.
 
 
 ### Predict prize size
@@ -1376,9 +1383,9 @@ ps <- dir_models %>% unnest(tidied_dir) %>% select(p.value)
 preds <- dir_models %>% unnest(pred_dir) %>% select(pred_dir)
 ```
 
-Highest and lowest p-values are `r max(ps)` and `r min(ps)` respectively.
+Highest and lowest p-values are `r sci(max(ps))` and `r sci(min(ps))` respectively.
 
-Lowest and highest predicted values are `r min(preds)` and `r max(preds)` respectively.
+Lowest and highest predicted values are `r sci(min(preds))` and `r sci(max(preds))` respectively.
 
 
 ### Including public inefficiency
@@ -1435,9 +1442,9 @@ ps <- dir_models %>% unnest(tidied_dir) %>% select(p.value)
 preds <- dir_models %>% unnest(pred_dir) %>% select(pred_dir)
 ```
 
-Highest and lowest p-values are `r max(ps)` and `r min(ps)` respectively.
+Highest and lowest p-values are `r sci(max(ps))` and `r sci(min(ps))` respectively.
 
-Lowest and highest predicted values are `r min(preds)` and `r max(preds)` respectively.
+Lowest and highest predicted values are `r sci(min(preds))` and `r max(preds)` respectively.
 
 Prepare function for predicting P(go) from inefficiency and target P(direct):
 ```{r, dir_models_backwards_pred, dependson=-1}
