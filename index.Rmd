@@ -82,6 +82,13 @@ p_lower_than <- function(p)
     if (p < 10^x)
       return(x)
 
+# Take m samples from dataset df
+take_subjects <- function(df, m)
+  df %>%
+    group_by(src, prize_phase) %>%
+    filter(subject >= min(subject) & subject < min(subject) + m) %>%
+    ungroup
+
 # The phases we'll be working with
 DEVELOPMENT_PHASES <- c('PC','P1','P2','P3','P4')
 MARKET_PHASES <- paste('M', 1:20, sep='')
@@ -891,7 +898,7 @@ ends <- improvement_models %>%
             min = min(p.value))
 ```
 
-Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
+Highest p-value is lower than 9^`r ends$max` and lowest lower than 10^`r ends$min`.
 
 ```{r, klshj, echo=FALSE, dependson=-1}
 improvement_models %>%
@@ -910,7 +917,7 @@ improvement_models %>%
 ```
 
 
-## Probability of go
+## P(go)
 
 By dividing the number of go-decisions under some given range of parameters with the number of projects under that same parameter range we reach the ratio of go/no-decisions.
 We will refer to this as P(go) since it also describes the probability of a project reaching a go-decision.
@@ -982,7 +989,7 @@ predict_response <- function(fit, df)
 
 We run the model once per combination of prize phase and source to avoid having to model interaction effects.
 
-```{r, lshfjksdf}
+```{r, go_models}
 go_models <- finals %>%
   group_by(src, prize_phase) %>%
   nest %>%
@@ -999,6 +1006,23 @@ tidied <- go_models %>%
 ```
 
 ```{r, kjhlsdfsd, echo=FALSE}
+go_models %>%
+  unnest(data, pred_go) %>%
+  ggplot(aes(prize_size, pred_go, color=prize_phase)) +
+  geom_line() +
+  facet_wrap(. ~ src) +
+  ylab('P(go)') +
+  xlab('Prize size') +
+  theme_minimal() +
+  theme(legend.position = 'top',
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0))) +
+  labs(color = '') +
+  scale_x_continuous(trans = 'log',
+                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     labels = trans_format('log10', math_format(10^.x))) +
+  scale_y_continuous(breaks = pretty_breaks(n = 11))
+
 go_models %>%
   unnest(data, pred_go) %>%
   ggplot(aes(prize_size, pred_go, color=prize_phase)) +
@@ -1314,7 +1338,9 @@ finals %>%
 ```
 
 
-## Probability of preferable direct
+
+
+## P(direct)
 Predicting whether direct is cheaper than indirect, let's call it P(direct), at no public inefficiency.
 
 ```{r, direct_preferble_jitter, echo=FALSE}
@@ -1395,7 +1421,7 @@ dir_model_logit <- function (df)
 
 dir_models <- go_models %>%
   unnest_legacy(data, pred_go) %>%
-  # Only compare cost diff in projs with go-deciison after intervention
+  # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
   nest %>%
@@ -1417,24 +1443,28 @@ dir_models %>%
     scale_x_continuous(breaks = pretty_breaks(n=8)) +
     scale_y_continuous(breaks = pretty_breaks(n=11)) +
     coord_cartesian(xlim = c(0.3, 1)) +
-    theme_minimal() +
+    theme(legend.position = 'top')
+
+dir_models %>%
+  unnest_legacy(data, pred_dir) %>%
+  ggplot(aes(publ_inefficiency, pred_dir, color=prize_phase)) +
+    geom_point(shape=1) +
+    facet_wrap(. ~ src) +
+    xlab('Public inefficiency') +
+    ylab('P(direct)') +
+    labs(color = 'Prize phase') +
+    scale_x_continuous(breaks = pretty_breaks(n=8)) +
+    scale_y_continuous(breaks = pretty_breaks(n=11)) +
+    #coord_cartesian(xlim = c(0.3, 1)) +
     theme(legend.position = 'top')
 ```
 
-P-values:
-```{r, dir_models_with_inef_p, echo=FALSE, dependson=-1}
+```{r, dir_models_with_inef_output, echo=FALSE, dependson=-1}
 dir_models %>%
+  select(src, prize_phase, tidied_dir) %>%
   unnest(tidied_dir) %>%
-  select(src, prize_phase, term, p.value) %>%
-  spread(prize_phase, p.value)
-```
-
-Coefficients:
-```{r, dir_models_with_inef_coef, echo=FALSE, dependson=-1}
-dir_models %>%
-  unnest(tidied_dir) %>%
-  select(src, prize_phase, term, estimate) %>%
-  spread(prize_phase, estimate) %>% kable
+  mutate(p.value = sci(p.value)) %>%
+  kable
 ```
 
 ```{r, dir_models_with_inef_ends, echo=FALSE, dependson=-1}
@@ -1480,13 +1510,13 @@ span <- dir_models %>%
 Find what P(go) yields P(direct) = `r target_dir=0.5; target_dir` under various inefficiencies.
 ```{r, backwards_predict_when_ind_and_dir_is_even, dependson=-1}
 steps <- 10
-variations <-
+inefficiencies <-
   merge(data.frame(src = INDICATIONS),
         data.frame(publ_inefficiency = seq(0, 1, length.out=steps)))
 evens <- dir_models %>%
   select(src, prize_phase, tidied_dir) %>%
   unnest(tidied_dir) %>%
-  merge(., variations) %>%
+  merge(., inefficiencies) %>%
   group_by(src, prize_phase, publ_inefficiency) %>%
   nest %>%
   mutate(pred_pred_go = mapply(predict_p_go_from_prob_and_inef, data, publ_inefficiency, target_dir)) %>%
@@ -1506,18 +1536,20 @@ for (curr in unique(span$prize_phase)) {
                            name='P(direct)', breaks=pretty_breaks(n=7)) +
       geom_line(data = filter(evens, prize_phase==curr),
                 aes(pred_pred_go, publ_inefficiency), linetype='dotted', color='black') +
+      geom_vline(xintercept=0.9) +
+      geom_hline(yintercept=0.5) +
       ylab('Public inefficiency') +
       xlab('P(go)') +
       ggtitle(curr) +
       scale_x_continuous(breaks = pretty_breaks(n=5)) +
-      coord_cartesian(xlim = c(0.5, 1)) +
+      coord_cartesian(xlim = c(0.4, 1)) +
       theme(legend.position = 'right',
         panel.spacing = unit(1, 'mm'))
   print(p)
 }
 ```
 
-### Breakpoints
+#### Breakpoints
 At what combination of P(go) and inefficiency is there no difference between direct and indirect?
 
 Caption:
@@ -1525,7 +1557,7 @@ Given some public inefficiency (X), what is the maximum P(go) (Y) that a prize c
 At P(go) below this point indirect funding is likely to be cheaper, and above this point direct funding is likely to be cheaper.
 
 ```{r, dklsdhfsdf, echo=FALSE, dependson=-1}
-evens %>%
+p <- evens %>%
   ggplot(aes(publ_inefficiency, pred_pred_go, color=src)) +
   geom_line() +
   facet_wrap(. ~ prize_phase, nrow=1) +
@@ -1543,8 +1575,16 @@ evens %>%
         panel.spacing = unit(0.9, 'lines')
         ) +
   guides(color = guide_legend(nrow = 1))
+p
 
 ggsave(file = './_figures/predict-dir.eps', plot = last_plot())
+
+# Zoomed in to scenario
+p +
+  coord_cartesian(ylim=c(0.895, 0.905), xlim=c(0.4, 0.6)) +
+  geom_hline(yintercept=0.9, linetype='dashed') +
+  geom_vline(xintercept=0.5, linetype='dashed') +
+  ggtitle('Zoomed in to scenario')
 
 evens %>%
   ggplot(aes(publ_inefficiency, pred_pred_go, color=prize_phase)) +
@@ -1566,6 +1606,183 @@ evens %>%
 
 ggsave(file = './_figures/predict-dir-per-src.eps', plot = last_plot())
 ```
+
+
+
+## P(direct) (resampled)
+
+`r # 10 takes ~ 34 minutes`
+```{r, V, echo=FALSE}
+V = 10 # TODO: More?
+pgos <- seq(0.5, 0.95, length.out=19)
+inefs <- seq(0, 1, length.out=21)
+```
+Mean cost savings of direct funding, computed by resampling:
+
+- `r length(pgos)` evenly spaced prize sizes yielding P(go) between `r min(pgos)*100`% and `r max(pgos)*100`%.
+- `r length(inefs)` evenly spaced inefficiencies between `r min(inefs)*100`% and `r max(inefs)*100`%.
+
+Takes `r V` first samples for each above combination from the original sample set.
+
+```{r, resampled, echo=FALSE, dependson=c('V')}
+models <- go_models %>%
+  group_by(src, prize_phase) %>%
+  select(src, prize_phase, tidied)
+
+hardcoded =
+  # Add indications
+  data.frame(src = INDICATIONS) %>%
+  # Add prize phases
+  merge(., intervention_phase_dist) %>%
+  # Add P(go)
+  merge(., data.frame(pred_go = pgos)) %>%
+  # Add inefficiency
+  merge(., data.frame(publ_inefficiency = inefs)) %>%
+  # Merge go models
+  merge(., models, by=c('src', 'prize_phase')) %>%
+  # Solve for prize_size from P(go)
+  #mutate(prize_size = map2(tidied, pred_go, predict_prize_from_prob)) %>%
+  mutate(prize_size = mapply(predict_prize_from_prob, tidied, pred_go)) %>%
+  # Remove prediction column
+  select(-tidied)
+
+resampled <- valuable %>%
+  take_subjects(V) %>%
+  # Remove old stochastic values
+  select(-publ_inefficiency, -prize_size) %>%
+  # Replace with spaced out range
+  merge(., hardcoded, by=c('src', 'prize_phase')) %>%
+  # Rebuild subject identifier since we've now duplicated subjects
+  mutate(subject = group_indices(., subject, prize_size, publ_inefficiency)) %>%
+  ## Run valuation but only keep final
+  valuation %>%
+  final_valuation
+```
+
+```{r, resampled-pgo-heatmaps, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10, fig.height=12}
+resampled %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(diff = inef_dir_enpv - ind_enpv,
+         dir = ifelse(diff > 0, 1, 0),
+         ind = ifelse(diff > 0, 0, 1)) %>%
+  group_by(src, prize_phase, pred_go, publ_inefficiency) %>%
+  summarize(pdir = sum(dir) / n()) %>%
+  ggplot(aes(publ_inefficiency, pred_go, z=pdir)) +
+  facet_grid(src ~ prize_phase) +
+  geom_tile(aes(fill=pdir)) +
+  #geom_smooth(data = f, aes(publ_inefficiency, pred_go),
+  #            method=lm, formula=y~bs(x, 3),
+  #            se=FALSE, color='black', size=0.5) +
+  scale_x_continuous(breaks = pretty_breaks(n=11)) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  ylab('P(go)') +
+  xlab('Inefficiency') +
+  scale_fill_gradient2(low='red', high='blue', mid='white', midpoint=0.5,
+                       guide = guide_colorbar(barwidth=25, title.position='top', limits=c(0, 1)),
+                       breaks = pretty_breaks(n=11),
+                       name='Probability of cost savings when directly funding, by go-decision') +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'top',
+        panel.spacing = unit(0, 'mm'))
+```
+
+
+
+## Cost difference (resampled)
+
+```{r, resampled-heatmap-per-go, echo=FALSE, dependson=c('resampled'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
+sensitivity <- 1
+tmp <- resampled %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  #filter(pred_go <= 0.9 & pred_go >= 0.4) %>%
+  mutate(diff = inef_dir_enpv - ind_enpv) %>%
+  group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
+  summarize(mean_diff = mean(diff)) %>%
+  mutate(mean_diff = mean_diff/10^6) %>%
+  # Find point closest to 0, i.e. where there is no diff
+  group_by(src, prize_phase, publ_inefficiency) %>%
+  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & abs(mean_diff) <= sensitivity) %>%
+  ungroup
+
+f <- function (x) filter(x, minima & prize_phase != 'P1')
+g <- function (x) filter(x, minima)
+
+tmp %>%
+  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
+  facet_grid(src ~ prize_phase) +
+  geom_tile(aes(fill=mean_diff)) +
+  #geom_line(data=f, aes(publ_inefficiency, pred_go)) +
+  #geom_point(data = g, aes(publ_inefficiency, pred_go), shape=1) +
+  geom_smooth(data = f, aes(publ_inefficiency, pred_go),
+              #method='loess',
+              method=lm, formula=y~bs(x, 3),
+              se=FALSE, color='black', size=0.5) +
+  scale_x_continuous(breaks = pretty_breaks(n=11)) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  ylab('P(go)') +
+  xlab('Inefficiency') +
+  scale_fill_gradientn(colors = c('darkred', 'red', 'white', 'blue', 'black'),
+                       limits = c(min(tmp$mean_diff), max(tmp$mean_diff)),
+                       values = rescale(c(min(tmp$mean_diff), 0, max(tmp$mean_diff))),
+                       name = 'Cost savings of direct funding per go-decision (million USD)',
+                       guide = guide_colorbar(barwidth=40, title.position='top'),
+                       breaks = pretty_breaks(n=20)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'top',
+        panel.spacing = unit(0, 'mm'))
+
+ggsave(file = './_figures/cost-savings-heatmap-per-go.eps', plot = last_plot())
+```
+
+Minima above must be within range [`r -sensitivity`, `r sensitivity`].
+
+```{r, resampled-heatmap-per-me, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10, fig.height=12}
+sensitivity <- 100
+
+tmp <- resampled %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(diff = inef_dir_enpv/prob_to - ind_enpv/prob_to) %>%
+  group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
+  summarize(mean_diff = mean(diff)) %>%
+  mutate(mean_diff = mean_diff/10^6) %>%
+  # Find point closest to 0, i.e. where there is no diff
+  group_by(src, prize_phase, publ_inefficiency) %>%
+  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & abs(mean_diff) <= sensitivity) %>%
+  ungroup
+
+tmp %>%
+  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
+  facet_grid(src ~ prize_phase) +
+  geom_tile(aes(fill=mean_diff)) +
+  #geom_line(data = f, aes(publ_inefficiency, pred_go)) +
+  geom_smooth(data = f, aes(publ_inefficiency, pred_go),
+              #method='loess',
+              method=lm, formula=y~bs(x, 3),
+              se=FALSE, color='black', size=0.5) +
+  scale_x_continuous(breaks = pretty_breaks(n=11)) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  ylab('P(go)') +
+  xlab('Inefficiency') +
+  scale_fill_gradientn(colors = c('darkred', 'red', 'white', 'blue', 'black'),
+                       limits = c(min(tmp$mean_diff), max(tmp$mean_diff)),
+                       values = rescale(c(min(tmp$mean_diff), 0, max(tmp$mean_diff))),
+                       name = 'Cost savings of direct funding per market entry (million USD)',
+                       guide = guide_colorbar(barwidth=40, title.position='top'),
+                       breaks = pretty_breaks(n=10)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'top',
+        panel.spacing = unit(0, 'mm'))
+
+ggsave(file = './_figures/cost-savings-heatmap-per-me.eps', plot = last_plot())
+```
+
+Minima above must be within range [`r -sensitivity`, `r sensitivity`].
 
 
 
@@ -2093,7 +2310,7 @@ for (curr_phase in c('M1')) {
              pred_go = round(pred_go * 100, 0),
              publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
       spread(publ_inefficiency, mean_pred_diff) %>%
-      kable(caption=sprintf('%s %s Mean cost-savings of direct funding per go-decision', curr_phase, curr_src)) %>%
+      kable(caption=sprintf('%s %s Mean cost savings of direct funding per go-decision', curr_phase, curr_src)) %>%
       print
   }
 }
@@ -2115,33 +2332,25 @@ for (curr_phase in c('M1')) {
              pred_go = round(pred_go * 100, 0),
              publ_inefficiency = round(publ_inefficiency * 100, 0)) %>%
       spread(publ_inefficiency, mean_pred_market_diff) %>%
-      kable(caption=sprintf('%s %s Mean cost-savings of direct funding per market entry', curr_phase, curr_src)) %>%
+      kable(caption=sprintf('%s %s Mean cost savings of direct funding per market entry', curr_phase, curr_src)) %>%
       print
   }
 }
 ```
 
 
-## Resampled scenarios
+## Scenario (resampled)
 To consider the cost difference between direct and indirect funding in a specific scenario we combine the prize sizes identified in the section [Effective prize sizes](#effective-prize-sizes) with a public sector inefficiency of 50%:
 
-We replace the old values in the `valuable` dataset with these new values and then rerun it through the `valuation` function.
-However, we only keep the `r M = 500; M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
-
-```{r, sdhlkfdss, include=FALSE}
-take_subjects <- function(df, m)
-  df %>%
-    group_by(src, prize_phase) %>%
-    filter(subject >= min(subject) & subject < min(subject) + m) %>%
-    ungroup
-
+```{r, m, echo=FALSE}
+M = 1000
 ```
 
-We construct two scenarios, A and B, where the prize size in A is indication and phase specific, and the prize size in B is the largest effective prize size for that phase (i.e. only phase specific).
-Scenario B thus models the idea of not targeting interventions but still choosing a known effective prize size.
+We replace the old values in the `valuable` dataset with these new values and then rerun it through the `valuation` function.
+However, we only keep the `r M` first samples for each source/indication since significantly fewer samples are needed when prize size and public inefficiencies are not stochastic.
 
-```{r, scenarios, dependson='effectives'}
-scenarioA <- valuable %>%
+```{r, scenario, dependson = c('m', 'effectives')}
+scenario <- valuable %>%
   take_subjects(M) %>%
   # Remove old stochastic values
   select(-prize_size, -publ_inefficiency) %>%
@@ -2154,102 +2363,164 @@ scenarioA <- valuable %>%
   # Run valuation but only keep final
   valuation %>%
   final_valuation
-
-scenarioB <- valuable %>%
-  take_subjects(M) %>%
-  # Remove old stochastic values
-  select(-prize_size, -publ_inefficiency) %>%
-  # Replace with scenario
-  merge(.,
-        (effectives %>%
-         group_by(prize_phase) %>%
-         summarize(prize_size = max(pred_prize_size)) %>%
-         ungroup),
-        by=c('prize_phase')) %>%
-  # Add public inefficiency estimate
-  mutate(publ_inefficiency = 0.5) %>%
-  # Run valuation but only keep final
-  valuation %>%
-  final_valuation
 ```
 
-```{r, scenarios_tables_and_figs, dependson=-1, echo=FALSE, results='asis'}
+### Cost savings (yes/no predicted)
+```{r, scenario_dir_expectation-params, echo=FALSE}
+pgo = 0.9
+inef = 0.5
+```
 
-tmp <- scenarioA %>%
+In which phases and indications do we expect direct funding to be cheaper for our scenario? Let's predict using our P(direct) model, when P(go) = `r pgo` and inefficiency = `r inef`.
+
+```{r, scenario_dir_expectation, dependson='dir_models', echo=FALSE}
+# TODO: This could most probably be done in a cleaner way
+scenario_dir_expectation <- dir_models %>%
+  select(src, prize_phase, dir_fit) %>%
+  group_by(src, prize_phase) %>%
+  # Hard-coded scenario values
+  mutate(pred_go = pgo, publ_inefficiency = inef) %>%
+  # Predict P(dir)
+  nest(data = c(pred_go, publ_inefficiency)) %>%
+  mutate(pred_dir = map2_dbl(dir_fit, data, predict_response)) %>%
+  unnest(c(data, pred_dir))
+```
+
+```{r, scenario-dir-expectation-plot, dependson='scenario_dir_expectation', echo=FALSE}
+tmp <- scenario_dir_expectation %>%
+  select(src, prize_phase, pred_dir) %>%
+  spread(src, pred_dir)
+kable(tmp, caption=sprintf('Predicted P(dir) at P(go) = %s and Inefficiency = %s', pgo, inef))
+
+scenario_dir_expectation %>%
+  select(src, prize_phase, pred_dir) %>%
+  mutate(indirect = 1-pred_dir) %>%
+  rename(direct = pred_dir) %>%
+  #group_by(src, prize_phase) %>%
+  gather('savings', 'prob', -src, -prize_phase) %>%
+  ggplot(aes(src, prob, fill=savings)) +
+  facet_wrap(. ~ prize_phase, nrow=1) +
+  geom_col() +
+  geom_hline(yintercept=0.5) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'bottom') +
+  xlab(element_blank()) +
+  ylab('Predicted probability of cost savings') +
+  ggtitle(sprintf('Predicted P(dir) at P(go) = %s and Inefficiency = %s  int_priv_enpv ≥ 0', pgo, inef))
+```
+
+### Cost savings (yes/no)
+```{r, klhshfks, dependson='scenario', results='asis', echo=FALSE}
+tmp <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  summarize(dir = sum(ifelse((inef_dir_enpv - ind_enpv) > 0, 1, 0 )),
+            ind = sum(ifelse((inef_dir_enpv - ind_enpv) > 0, 0, 1)),
+            pdir = dir / n(),
+            pind = ind / n())
+
+tmp %>%
+  select(src, prize_phase, pdir) %>%
+  arrange(prize_phase) %>%
+  spread(src, pdir) %>%
+  kable(caption='Resampled P(direct)')
+
+tmp %>%
+  select(src, prize_phase, pdir, pind) %>%
+  rename(indirect = pind,
+         direct = pdir) %>%
+  gather('savings', 'prob', -src, -prize_phase) %>%
+  ggplot(aes(src, prob, fill=savings)) +
+  facet_wrap(. ~ prize_phase, nrow=1) +
+  geom_col() +
+  geom_hline(yintercept=0.5) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'bottom') +
+  xlab(element_blank()) +
+  ylab('Ratio of cost savings in resampled scenario') +
+  ggtitle('Intervened Private ENPV ≥ 0')
+```
+
+### Cost savings (actual)
+TODO: Intervened private enpv >= 0 in all below.
+
+```{r, scenario-figs, dependson='scenario', echo=FALSE, results='asis'}
+tmp <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
   summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
 tmp %>%
-  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  mutate(mean_diff = round(mean_diff/10^6, 2)) %>%
   spread(prize_phase, mean_diff) %>%
   kable(caption='Narrow prizes (per go-decision) (million usd)')
 tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
-  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  ggplot(aes(src, mean_diff / 10^6, fill=favorable)) +
   geom_col() +
-  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  facet_wrap(.~prize_phase, nrow=1) +
   scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'bottom') +
   xlab(element_blank()) +
-  ylab('Difference (million usd)') +
-  coord_flip() +
-  ggtitle('Narrow prizes (per go-decision)')
+  ylab('Cost savings of direct funding (million USD)') +
+  ggtitle('Narrow prizes (per go-decision)  Intervened Private ENPV >= 0')
+```
 
-tmp <- scenarioA %>%
+Where intervened private ENPV >= 0:
+```{r, scenario_cost_savings_histogram, dependson='scenario', echo=FALSE, fig.fullwidth=TRUE, fig.width=10, fig.height=2.5}
+scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  mutate(dir = inef_dir_enpv - ind_enpv) %>%
+  mutate(dir = dir / 10^6) %>%
+  ggplot(aes(dir, color=src)) +
+  facet_wrap(~ prize_phase, nrow=1, scale='free') +
+  geom_freqpoly() +
+  geom_vline(xintercept=0, linetype='dotted') +
+  ylab('Count') +
+  xlab('Cost savings of direct funding (million usd)') +
+  scale_x_continuous(breaks = pretty_breaks(n=11)) +
+  guides(color = guide_legend(nrow=1, name='')) +
+  theme_minimal() +
+  theme(legend.position = 'top',
+        panel.spacing = unit(0.8, 'lines'),
+        axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+ggsave(file = './_figures/scenario-hist.eps', plot = last_plot())
+```
+
+
+#### Per market entry
+```{r, scenario-figs-per-market-entry, dependson='scenario', echo=FALSE, results='asis'}
+tmp <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
   summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
 tmp %>%
-  mutate(mean_diff = round(mean_diff/10^6)) %>%
+  mutate(mean_diff = round(mean_diff/10^6, 2)) %>%
   spread(prize_phase, mean_diff) %>%
   kable(caption='Narrow prizes (per market entry) (million usd)')
 tmp %>%
   mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
-  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
+  ggplot(aes(src, mean_diff/10^6, fill=favorable)) +
   geom_col() +
-  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  facet_wrap(.~prize_phase, nrow=1) +
   scale_y_continuous(breaks = pretty_breaks(n = 15)) +
   xlab(element_blank()) +
-  ylab('Cost difference (million usd)') +
-  coord_flip() +
-  ggtitle('Narrow prizes (per market entry)')
-
-tmp <- scenarioB %>%
-  group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
-tmp %>%
-  mutate(mean_diff = round(mean_diff/10^6)) %>%
-  spread(prize_phase, mean_diff) %>%
-  kable(caption='Broad prizes (per go-decision) (million usd)')
-tmp %>%
-  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
-  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
-  geom_col() +
-  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
-  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
-  xlab(element_blank()) +
-  ylab('Cost difference (million usd)') +
-  coord_flip() +
-  ggtitle('Broad prizes (per go-decision)')
-
-tmp <- scenarioB %>%
-  group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
-tmp %>%
-  mutate(mean_diff = round(mean_diff/10^6)) %>%
-  spread(prize_phase, mean_diff) %>%
-  kable(caption='Broad prizes (per market entry) (million usd)')
-tmp %>%
-  mutate(favorable = ifelse(mean_diff > 0, 'Direct', 'Indirect')) %>%
-  ggplot(aes(src, abs(mean_diff) / 10^6, fill=favorable)) +
-  geom_col() +
-  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
-  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
-  xlab(element_blank()) +
-  ylab('Cost difference (million usd)') +
-  coord_flip() +
-  ggtitle('Broad prizes (per market entry)')
+  ylab('Cost savings of direct funding (million usd)') +
+  ggtitle('Narrow prizes (per market entry)  Intervened Private ENPV >= 0') +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'bottom')
 ```
 
-
-## Comparing resampled and predicted (linear)
+### Comparing resampled and predicted (linear)
 
 Quick comparison of resampled and predicted cost differences for the specific scenario outlined in the resampling section (for sanity checking purposes).
 
@@ -2265,18 +2536,10 @@ predicted <- span %>%
   filter(pred_go == target_p_go * 100 & publ_inefficiency == 50) %>%
   select(-pred_go, -publ_inefficiency)
 
-resampled <- scenarioA %>%
+resampled <- scenario %>%
   group_by(src, prize_phase) %>%
   summarize(diff = mean(inef_dir_enpv - ind_enpv)) %>%
   mutate(diff = round(diff/10^6))
-
-predicted %>%
-  spread(prize_phase, diff) %>%
-  kable(caption='Predicted: diff per go-decision.')
-
-resampled %>%
-  spread(prize_phase, diff) %>%
-  kable(caption='Re-sampled: diff per go-decision.')
 
 bind_rows(predicted %>% mutate(type = 'predicted'),
           resampled %>% mutate(type = 'resampled')) %>%
@@ -2300,7 +2563,7 @@ predicted <- span %>%
   filter(pred_go == target_p_go * 100 & publ_inefficiency == 50) %>%
   select(-pred_go, -publ_inefficiency)
 
-resampled <- scenarioA %>%
+resampled <- scenario %>%
   group_by(src, prize_phase) %>%
   mutate(inef_dir_enpv = inef_dir_enpv / 10^6,
          ind_enpv = ind_enpv / 10^6) %>%
@@ -2318,25 +2581,5 @@ merge(predicted, resampled) %>%
   geom_point(aes(y = median_resampled)) +
   geom_point(color='red') +
   facet_wrap(. ~ src, scale='free')
-```
-
-Let's look at the heatmap of CIAI and CUTI again since it appears that the last phase is not the most expensive phase, comparatively.
-
-```{r, fkhflsf, dependson=-1, echo=FALSE}
-for (curr in c('CIAI', 'CUTI')) {
-  p <- span %>%
-    filter(src == curr) %>%
-    unnest_legacy(data, pred_diff) %>%
-    ggplot(aes(pred_go*100, publ_inefficiency*100, z=pred_diff/10^6)) +
-    facet_wrap(. ~ prize_phase, nrow=1) +
-    geom_tile(aes(fill=pred_diff/10^6)) +
-    scale_fill_gradient2(low='blue', high='red', mid='white', name='Diff', breaks=pretty_breaks(n=7)) +
-    ylab('Public inefficiency') +
-    xlab('P(go)') +
-    ggtitle(curr) +
-    theme(legend.position = 'right',
-          panel.spacing = unit(1, 'mm'))
-  print(p)
-}
 ```
 
