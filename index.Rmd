@@ -885,14 +885,14 @@ improvement_models <- finals %>%
   ungroup
 
 improvement_models %>%
-  unnest_legacy(tidied) %>%
+  unnest(tidied) %>%
   select(src, prize_phase, term, p.value) %>%
   mutate(p.value = format(p.value, scientific=TRUE)) %>%
   spread(prize_phase, p.value) %>%
   kable(caption='P-values')
 
 ends <- improvement_models %>%
-  unnest_legacy(tidied) %>%
+  unnest(tidied) %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   summarize(max = max(p.value),
             min = min(p.value))
@@ -902,7 +902,7 @@ Highest p-value is lower than 9^`r ends$max` and lowest lower than 10^`r ends$mi
 
 ```{r, klshj, echo=FALSE, dependson=-1}
 improvement_models %>%
-  unnest_legacy(data, pred_improvement) %>%
+  unnest(c(data, pred_improvement)) %>%
   ggplot(aes(prize_size, 10^pred_improvement, color=prize_phase)) +
   geom_point(aes(y = int_priv_enpv - priv_enpv), alpha=0.5, shape=1) +
   geom_line() +
@@ -998,16 +998,13 @@ go_models <- finals %>%
          tidied = map(go_fit, tidy)) %>%
   ungroup
 
-# NOTE: Using legacy unnest because:
-# https://github.com/tidyverse/tidyr/issues/694
-
 tidied <- go_models %>%
-  unnest_legacy(tidied)
+  unnest(tidied)
 ```
 
 ```{r, kjhlsdfsd, echo=FALSE}
 go_models %>%
-  unnest(data, pred_go) %>%
+  unnest(c(data, pred_go)) %>%
   ggplot(aes(prize_size, pred_go, color=prize_phase)) +
   geom_line() +
   facet_wrap(. ~ src) +
@@ -1024,7 +1021,7 @@ go_models %>%
   scale_y_continuous(breaks = pretty_breaks(n = 11))
 
 go_models %>%
-  unnest(data, pred_go) %>%
+  unnest(c(data, pred_go)) %>%
   ggplot(aes(prize_size, pred_go, color=prize_phase)) +
   geom_line() +
   facet_wrap(. ~ src) +
@@ -1097,13 +1094,15 @@ predict_prize_from_prob <- function(tidied, y) {
 We can sanity check the output of the function by predicting prize size from predicted P(go) and check if it is correlated with the actual prize size that P(go) was predicted from.
 
 
-```{r, lkhjgdfg, echo=FALSE}
+```{r, sanity-check-pred-go, echo=FALSE}
+# NOTE: Using legacy unnest because:                                                          │
+# https://github.com/tidyverse/tidyr/issues/694
 tmp <- go_models %>%
   mutate(pred_prize_size = map2(tidied, pred_go, predict_prize_from_prob)) %>%
   unnest_legacy(pred_prize_size, pred_go, data)
 ```
 
-```{r, ashjldfsdj, echo=FALSE}
+```{r, ashjldfsdj, echo=FALSE, dependson=-1}
 max_prob <- 0.99999
 tmp %>%
   filter(pred_go < max_prob) %>%
@@ -1132,7 +1131,7 @@ tmp %>%
 Note that (not evident in the plot above is that) predicted prize size becomes a constant as y reaches 100%.
 Therefore significant differences between predicted and actual prize appear and grow when approximating P(go) = 1 since we have sampled prizes much larger than prizes required to yield 100% go but when predicting required prize sizes to achieve 100% go will always yield the same prize size.
 
-```{r, kjsdfhlksjdf, echo=FALSE}
+```{r, kjsdfhlksjdf, echo=FALSE, dependson=-1}
 tmp %>%
   filter(pred_go < max_prob) %>%
   mutate(diff = prize_size - pred_prize_size) %>%
@@ -1147,7 +1146,7 @@ tmp %>%
   ggtitle(sprintf('where P(go) < %s', max_prob))
 ```
 
-```{r, sdlfhsdklfhsd, echo=FALSE}
+```{r, sdlfhsdklfhsd, echo=FALSE, dependson=-1}
 tmp %>%
   ggplot(aes(prize_size, pred_go*100, group=prize_phase)) +
   geom_line(color='black', size=2) +
@@ -1970,19 +1969,19 @@ diff_models_nonparametric <- go_models %>%
 ```{r, diff_model_nonparametric_tables, echo=FALSE}
 diff_models_nonparametric %>%
   select(src, prize_phase, tidied_diff_spline) %>%
-  unnest_legacy(tidied_diff_spline) %>%
+  unnest(tidied_diff_spline) %>%
   mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
   kable(caption = 'Spline')
 
 diff_models_nonparametric %>%
   select(src, prize_phase, tidied_diff_logspline) %>%
-  unnest_legacy(tidied_diff_logspline) %>%
+  unnest(tidied_diff_logspline) %>%
   mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
   kable(caption = 'Spline in log')
 
 diff_models_nonparametric %>%
   select(src, prize_phase, tidied_diff_gam) %>%
-  unnest_legacy(tidied_diff_gam) %>%
+  unnest(tidied_diff_gam) %>%
   mutate(p.value = sprintf('< 10^%s', sapply(p.value, p_lower_than))) %>%
   kable(caption = 'GAM')
 ```
@@ -2113,19 +2112,19 @@ All p-values are significant.
 #### P-values of go-decision model
 ```{r, akhjlshlkdsf, dependson=-1, echo=FALSE}
 diff_models %>%
-  unnest_legacy(tidied_diff) %>%
+  unnest(tidied_diff) %>%
   select(src, prize_phase, term, p.value) %>%
   spread(prize_phase, p.value)
 
 diff_models %>%
-  unnest_legacy(tidied_diff) %>%
+  unnest(tidied_diff) %>%
   select(src, prize_phase, term, p.value) %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   spread(prize_phase, p.value) %>%
   kable(caption='P-value is lower than 10^x')
 
 ends <- diff_models %>%
-  unnest_legacy(tidied_diff) %>%
+  unnest(tidied_diff) %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   summarize(max = max(p.value),
             min = min(p.value))
@@ -2137,19 +2136,19 @@ Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$m
 #### P-values of market entry model
 ```{r, akhjlshlkdsf2, dependson=-1, echo=FALSE}
 diff_models %>%
-  unnest_legacy(tidied_market_diff) %>%
+  unnest(tidied_market_diff) %>%
   select(src, prize_phase, term, p.value) %>%
   spread(prize_phase, p.value)
 
 diff_models %>%
-  unnest_legacy(tidied_market_diff) %>%
+  unnest(tidied_market_diff) %>%
   select(src, prize_phase, term, p.value) %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   spread(prize_phase, p.value) %>%
   kable(caption='P-value is lower than 10^x')
 
 ends <- diff_models %>%
-  unnest_legacy(tidied_market_diff) %>%
+  unnest(tidied_market_diff) %>%
   mutate(p.value = sapply(p.value, p_lower_than)) %>%
   summarize(max = max(p.value),
             min = min(p.value))
