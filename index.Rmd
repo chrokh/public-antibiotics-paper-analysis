@@ -2536,6 +2536,8 @@ predicted <- span %>%
   select(-pred_go, -publ_inefficiency)
 
 resampled <- scenario %>%
+  # Only compare cost diff in projs with go-decision after intervention
+  filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
   summarize(diff = mean(inef_dir_enpv - ind_enpv)) %>%
   mutate(diff = round(diff/10^6))
