@@ -12,6 +12,10 @@ output:
         collapse: subsection
 ---
 
+```{r, echo=FALSE}
+# Compile time: 2h 30 min.
+```
+
 
 # Preface {-}
 This document contains the full analysis that underpins the paper paper "Time for public pharma?".
@@ -1612,7 +1616,7 @@ ggsave(file = './_figures/predict-dir-per-src.eps', plot = last_plot())
 
 `r # 10 takes ~ 34 minutes`
 ```{r, V, echo=FALSE}
-V = 10 # TODO: More?
+V = 20 # TODO: More?
 pgos <- seq(0.5, 0.95, length.out=19)
 inefs <- seq(0, 1, length.out=21)
 ```
@@ -1670,9 +1674,6 @@ resampled %>%
   ggplot(aes(publ_inefficiency, pred_go, z=pdir)) +
   facet_grid(src ~ prize_phase) +
   geom_tile(aes(fill=pdir)) +
-  #geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-  #            method=lm, formula=y~bs(x, 3),
-  #            se=FALSE, color='black', size=0.5) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
@@ -1692,7 +1693,8 @@ resampled %>%
 ## Cost difference (resampled)
 
 ```{r, resampled-heatmap-per-go, echo=FALSE, dependson=c('resampled'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
-sensitivity <- 1
+f <- function (x) filter(x, minima & prize_phase != 'P1')
+g <- function (x) filter(x, minima)
 tmp <- resampled %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
@@ -1703,22 +1705,19 @@ tmp <- resampled %>%
   mutate(mean_diff = mean_diff/10^6) %>%
   # Find point closest to 0, i.e. where there is no diff
   group_by(src, prize_phase, publ_inefficiency) %>%
-  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & abs(mean_diff) <= sensitivity) %>%
+  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
   ungroup
-
-f <- function (x) filter(x, minima & prize_phase != 'P1')
-g <- function (x) filter(x, minima)
-
 tmp %>%
   ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
   facet_grid(src ~ prize_phase) +
   geom_tile(aes(fill=mean_diff)) +
-  #geom_line(data=f, aes(publ_inefficiency, pred_go)) +
-  #geom_point(data = g, aes(publ_inefficiency, pred_go), shape=1) +
+  geom_point(data = g, aes(publ_inefficiency, pred_go), shape='x') +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              #method='loess',
-              method=lm, formula=y~bs(x, 3),
-              se=FALSE, color='black', size=0.5) +
+              color = 'black', size = 0.5,
+              se = FALSE,
+              method = 'nls',
+              method.args = list(formula = y ~ k + a*x + b*x^2,
+                                 start = c(k=0.5, a=1, b=-1))) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
@@ -1733,15 +1732,10 @@ tmp %>%
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         legend.position = 'top',
         panel.spacing = unit(0, 'mm'))
-
 ggsave(file = './_figures/cost-savings-heatmap-per-go.eps', plot = last_plot())
 ```
 
-Minima above must be within range [`r -sensitivity`, `r sensitivity`].
-
 ```{r, resampled-heatmap-per-me, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10, fig.height=12}
-sensitivity <- 100
-
 tmp <- resampled %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
@@ -1751,18 +1745,19 @@ tmp <- resampled %>%
   mutate(mean_diff = mean_diff/10^6) %>%
   # Find point closest to 0, i.e. where there is no diff
   group_by(src, prize_phase, publ_inefficiency) %>%
-  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & abs(mean_diff) <= sensitivity) %>%
+  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
   ungroup
-
 tmp %>%
   ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
   facet_grid(src ~ prize_phase) +
   geom_tile(aes(fill=mean_diff)) +
-  #geom_line(data = f, aes(publ_inefficiency, pred_go)) +
+  geom_point(data = g, aes(publ_inefficiency, pred_go), shape = 'x') +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              #method='loess',
-              method=lm, formula=y~bs(x, 3),
-              se=FALSE, color='black', size=0.5) +
+              color = 'black', size = 0.5,
+              se = FALSE,
+              method = 'nls',
+              method.args = list(formula = y ~ k + a*x + b*x^2,
+                                 start = c(k=0.5, a=1, b=-1))) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
@@ -1777,11 +1772,46 @@ tmp %>%
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         legend.position = 'top',
         panel.spacing = unit(0, 'mm'))
-
 ggsave(file = './_figures/cost-savings-heatmap-per-me.eps', plot = last_plot())
 ```
 
-Minima above must be within range [`r -sensitivity`, `r sensitivity`].
+### Limits
+```{r, resampled-heatmap-limits-per-me, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10}
+tmp <- resampled %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(diff = inef_dir_enpv/prob_to - ind_enpv/prob_to) %>%
+  group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
+  summarize(mean_diff = mean(diff)) %>%
+  mutate(mean_diff = mean_diff/10^6) %>%
+  # Find point closest to 0, i.e. where there is no diff
+  group_by(src, prize_phase, publ_inefficiency) %>%
+  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
+  ungroup %>%
+  f
+tmp %>%
+  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff, color=src)) +
+  facet_grid(~ prize_phase) +
+  geom_smooth(aes(publ_inefficiency, pred_go),
+              size = 0.5,
+              se = FALSE,
+              method = 'nls',
+              method.args = list(formula = y ~ k + a*x + b*x^2,
+                                 start = c(k=0.5, a=1, b=-1))) +
+  scale_x_continuous(breaks = pretty_breaks(n=11)) +
+  scale_y_continuous(breaks = pretty_breaks(n=11)) +
+  ylab('P(go)') +
+  xlab('Inefficiency') +
+  theme_minimal() +
+  guides(color = guide_legend(nrow=1, name='')) +
+  theme(legend.position = 'top',
+        axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
+        panel.spacing = unit(0.9, 'lines')
+        ) +
+ggsave(file = './_figures/cost-savings-limits-per-me.eps', plot = last_plot())
+```
 
 
 
