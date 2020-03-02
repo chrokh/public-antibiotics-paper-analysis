@@ -14,6 +14,7 @@ output:
 
 ```{r, echo=FALSE}
 # Compile time: 2h 30 min.
+# Compile time: ~7h 30 min (with increased heatmap samples).
 ```
 
 
@@ -62,6 +63,7 @@ library(purrr)
 library(forcats)
 library(mgcv) # Non-parametric models (GAM)
 library(splines) # Non-parametric models (splines::bs)
+library(viridis)
 
 # Cache code chunks
 knitr::opts_chunk$set(cache=TRUE, collapse=TRUE)
@@ -1617,7 +1619,7 @@ ggsave(file = './_figures/predict-dir-per-src.eps', plot = last_plot())
 `r # 10 takes ~ 34 minutes`
 ```{r, V, echo=FALSE}
 V = 20 # TODO: More?
-pgos <- seq(0.5, 0.95, length.out=19)
+pgos <- seq(0.5, 0.95, length.out=37)
 inefs <- seq(0, 1, length.out=21)
 ```
 Mean cost savings of direct funding, computed by resampling:
@@ -1693,12 +1695,10 @@ resampled %>%
 ## Cost difference (resampled)
 
 ```{r, resampled-heatmap-per-go, echo=FALSE, dependson=c('resampled'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
-f <- function (x) filter(x, minima & prize_phase != 'P1')
-g <- function (x) filter(x, minima)
+f <- function (x) filter(x, minima)
 tmp <- resampled %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
-  #filter(pred_go <= 0.9 & pred_go >= 0.4) %>%
   mutate(diff = inef_dir_enpv - ind_enpv) %>%
   group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
   summarize(mean_diff = mean(diff)) %>%
@@ -1708,28 +1708,32 @@ tmp <- resampled %>%
   mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
   ungroup
 tmp %>%
-  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
+  ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
   facet_grid(src ~ prize_phase) +
-  geom_tile(aes(fill=mean_diff)) +
-  geom_point(data = g, aes(publ_inefficiency, pred_go), shape='x') +
+  geom_raster(interpolate=TRUE) +
+  geom_contour(binwidth=25, size=0.25, color='black', linetype='solid', alpha=0.3) +
+  geom_point(data = f, aes(publ_inefficiency, pred_go), size=0.5) +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
               color = 'black', size = 0.5,
               se = FALSE,
               method = 'nls',
               method.args = list(formula = y ~ k + a*x + b*x^2,
                                  start = c(k=0.5, a=1, b=-1))) +
+  scale_fill_viridis_c(direction = -1,
+                       breaks = pretty_breaks(n=10),
+                       values = rescale(c(0, max(abs(tmp$mean_diff)))),
+                       option = 'magma',
+                       name = 'Mean cost savings (million USD)',
+                       guide = guide_colorbar(barwidth=30, title.position='top')
+                         ) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
   xlab('Inefficiency') +
-  scale_fill_gradientn(colors = c('darkred', 'red', 'white', 'blue', 'black'),
-                       limits = c(min(tmp$mean_diff), max(tmp$mean_diff)),
-                       values = rescale(c(min(tmp$mean_diff), 0, max(tmp$mean_diff))),
-                       name = 'Cost savings of direct funding per go-decision (million USD)',
-                       guide = guide_colorbar(barwidth=40, title.position='top'),
-                       breaks = pretty_breaks(n=20)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         legend.position = 'top',
         panel.spacing = unit(0, 'mm'))
 ggsave(file = './_figures/cost-savings-heatmap-per-go.eps', plot = last_plot())
@@ -1748,28 +1752,33 @@ tmp <- resampled %>%
   mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
   ungroup
 tmp %>%
-  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff)) +
+  ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
   facet_grid(src ~ prize_phase) +
-  geom_tile(aes(fill=mean_diff)) +
-  geom_point(data = g, aes(publ_inefficiency, pred_go), shape = 'x') +
+  geom_raster(interpolate=TRUE) +
+  geom_contour(binwidth=500,
+               size=0.25, color='black', linetype='solid', alpha=0.3) +
+  geom_point(data = f, aes(publ_inefficiency, pred_go), size=0.5) +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
               color = 'black', size = 0.5,
               se = FALSE,
               method = 'nls',
               method.args = list(formula = y ~ k + a*x + b*x^2,
                                  start = c(k=0.5, a=1, b=-1))) +
+  scale_fill_viridis_c(direction = -1,
+                       breaks = pretty_breaks(n=10),
+                       values = rescale(c(0, max(abs(tmp$mean_diff)))),
+                       option = 'magma',
+                       name = 'Mean cost savings (million USD)',
+                       guide = guide_colorbar(barwidth=30, title.position='top')
+                         ) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
   xlab('Inefficiency') +
-  scale_fill_gradientn(colors = c('darkred', 'red', 'white', 'blue', 'black'),
-                       limits = c(min(tmp$mean_diff), max(tmp$mean_diff)),
-                       values = rescale(c(min(tmp$mean_diff), 0, max(tmp$mean_diff))),
-                       name = 'Cost savings of direct funding per market entry (million USD)',
-                       guide = guide_colorbar(barwidth=40, title.position='top'),
-                       breaks = pretty_breaks(n=10)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         legend.position = 'top',
         panel.spacing = unit(0, 'mm'))
 ggsave(file = './_figures/cost-savings-heatmap-per-me.eps', plot = last_plot())
@@ -1803,7 +1812,7 @@ tmp %>%
   ylab('P(go)') +
   xlab('Inefficiency') +
   theme_minimal() +
-  guides(color = guide_legend(nrow=1, name='')) +
+  guides(color = guide_legend(nrow=1, title=NULL)) +
   theme(legend.position = 'top',
         axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
