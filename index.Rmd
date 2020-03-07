@@ -1711,10 +1711,9 @@ tmp %>%
   ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
   facet_grid(src ~ prize_phase) +
   geom_raster(interpolate=TRUE) +
-  geom_contour(binwidth=25, size=0.25, color='black', linetype='solid', alpha=0.3) +
-  geom_point(data = f, aes(publ_inefficiency, pred_go), size=0.5) +
+  geom_contour(binwidth=25, size=0.1, color='black') +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              color = 'black', size = 0.5,
+              color = 'white', size = 0.5,
               se = FALSE,
               method = 'nls',
               method.args = list(formula = y ~ k + a*x + b*x^2,
@@ -1722,7 +1721,7 @@ tmp %>%
   scale_fill_viridis_c(direction = -1,
                        breaks = pretty_breaks(n=10),
                        values = rescale(c(0, max(abs(tmp$mean_diff)))),
-                       option = 'magma',
+                       option = 'viridis',
                        name = 'Mean cost savings (million USD)',
                        guide = guide_colorbar(barwidth=30, title.position='top')
                          ) +
@@ -1755,11 +1754,9 @@ tmp %>%
   ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
   facet_grid(src ~ prize_phase) +
   geom_raster(interpolate=TRUE) +
-  geom_contour(binwidth=500,
-               size=0.25, color='black', linetype='solid', alpha=0.3) +
-  geom_point(data = f, aes(publ_inefficiency, pred_go), size=0.5) +
+  geom_contour(binwidth=500, size=0.1, color='black') +
   geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              color = 'black', size = 0.5,
+              color = 'white', size = 0.5,
               se = FALSE,
               method = 'nls',
               method.args = list(formula = y ~ k + a*x + b*x^2,
@@ -1767,7 +1764,7 @@ tmp %>%
   scale_fill_viridis_c(direction = -1,
                        breaks = pretty_breaks(n=10),
                        values = rescale(c(0, max(abs(tmp$mean_diff)))),
-                       option = 'magma',
+                       option = 'viridis',
                        name = 'Mean cost savings (million USD)',
                        guide = guide_colorbar(barwidth=30, title.position='top')
                          ) +
@@ -2542,7 +2539,7 @@ tmp <- scenario %>%
   group_by(src, prize_phase) %>%
   summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
 tmp %>%
-  mutate(mean_diff = round(mean_diff/10^6, 2)) %>%
+  mutate(mean_diff = round(mean_diff/10^6, 0)) %>%
   spread(prize_phase, mean_diff) %>%
   kable(caption='Narrow prizes (per market entry) (million usd)')
 tmp %>%
@@ -2557,6 +2554,147 @@ tmp %>%
   theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         legend.position = 'bottom')
 ```
+
+
+### Costs (actual)
+Where intervened private ENPV >= 0:
+
+```{r, scenario-costs, dependson='scenario', echo=FALSE, fig.fullwidth=TRUE, fig.width=10, fig.height=7}
+print('per go-decision:')
+scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(Direct = -inef_dir_enpv,
+         Indirect = -ind_enpv) %>%
+  select(src, prize_phase, Direct, Indirect) %>%
+  gather('funding', 'cost', -src, -prize_phase) %>%
+  ggplot(aes(src, cost/10^6, fill=funding)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost of funding (million USD)') +
+  coord_flip(ylim = c(20, 320)) +
+  guides(fill=guide_legend(nrow=1, title=NULL)) +
+  theme_minimal() +
+  theme(legend.position = 'top')
+
+print('per market entry:')
+scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(Direct = -inef_dir_enpv / prob_to,
+         Indirect = -ind_enpv / prob_to) %>%
+  select(src, prize_phase, Direct, Indirect) %>%
+  gather('funding', 'cost', -src, -prize_phase) %>%
+  ggplot(aes(src, cost/10^6, fill=funding)) +
+  geom_boxplot(outlier.shape = NA) +
+  facet_wrap(.~prize_phase, ncol=1, strip.position='right') +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost of funding (million USD)') +
+  coord_flip() +
+  guides(fill=guide_legend(nrow=1, title=NULL)) +
+  theme_minimal() +
+  theme(legend.position = 'top')
+ggsave(file = './_figures/scenario-costs.eps', plot = last_plot())
+```
+
+```{r, scenario_costs, dependson='scenario', echo=FALSE, fig.fullwidth=TRUE, fig.width=10}
+# Below is messy because we're zooming away from outliers
+plotf <- function (df, prize_phase, ylab) {
+  ytop <- case_when(prize_phase == 'P1' ~ 85,
+                    prize_phase == 'P2' ~ 95,
+                    prize_phase == 'P3' ~ 140,
+                    prize_phase == 'P4' ~ 330,
+                    prize_phase == 'M1' ~ 330)
+  f <- function (df)
+    df %>%
+      group_by(src, funding) %>%
+      summarize(cost = median(cost)) %>%
+      ungroup
+  p <- df %>%
+    mutate(prize_phase = prize_phase) %>%
+    ggplot(aes(src, cost/10^6, fill=funding)) +
+    geom_boxplot(outlier.shape = NA) +
+    facet_wrap(.~prize_phase, nrow=1) +
+    scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+    xlab(element_blank()) +
+    ylab(element_blank()) +
+    coord_cartesian(ylim = c(15, ytop)) +
+    guides(fill = guide_legend(nrow=1, title=NULL), color=FALSE) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+          legend.position = 'top')
+    if (ylab) p <- p + ylab('Cost of funding (million USD) per go-decision')
+    return(p)
+}
+ps <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  mutate(Direct = -inef_dir_enpv,
+         Indirect = -ind_enpv) %>%
+  select(src, prize_phase, Direct, Indirect) %>%
+  gather('funding', 'cost', -src, -prize_phase) %>%
+  group_by(prize_phase) %>%
+  nest %>%
+  mutate(ylab = ifelse(prize_phase == 'P1', TRUE, FALSE),
+         plot = pmap(list(data, prize_phase, ylab), plotf)) %>%
+  select(prize_phase, plot)
+ggarrange(plotlist=ps$plot,
+          common.legend=TRUE,
+          nrow=1)
+
+tmp <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  summarize(Direct   = mean(-inef_dir_enpv),
+            Indirect = mean(-ind_enpv)) %>%
+  ungroup %>%
+  gather('funding', 'cost', -src, -prize_phase)
+tmp %>%
+  ggplot(aes(src, cost/10^6, fill=funding)) +
+  geom_col(position='dodge') +
+  facet_wrap(.~prize_phase, nrow=1) +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost of funding (million USD) per go-decision') +
+  guides(fill = guide_legend(nrow=1, title=NULL)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'top')
+tmp %>%
+  mutate(cost = round(cost / 10^6)) %>%
+  spread(prize_phase, cost) %>%
+  kable(caption='per go-decision')
+
+tmp <- scenario %>%
+  # Only compare cost diff in projs with go-decison after intervention
+  filter(int_priv_enpv >= 0) %>%
+  group_by(src, prize_phase) %>%
+  summarize(Direct   = mean(-inef_dir_enpv/prob_to),
+            Indirect = mean(-ind_enpv/prob_to)) %>%
+  ungroup %>%
+  gather('funding', 'cost', -src, -prize_phase)
+tmp %>%
+  ggplot(aes(src, cost/10^6, fill=funding)) +
+  geom_col(position='dodge') +
+  facet_wrap(.~prize_phase, nrow=1) +
+  scale_y_continuous(breaks = pretty_breaks(n = 15)) +
+  xlab(element_blank()) +
+  ylab('Cost of funding (million USD) per market entry') +
+  guides(fill = guide_legend(nrow=1, title=NULL)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        legend.position = 'top')
+tmp %>%
+  mutate(cost = round(cost / 10^6)) %>%
+  spread(prize_phase, cost) %>%
+  kable(caption='per market entry')
+```
+
+
 
 ### Comparing resampled and predicted (linear)
 
