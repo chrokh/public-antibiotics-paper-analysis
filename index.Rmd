@@ -459,6 +459,7 @@ phases <- phases %>%
   # Sum up costs per phase for every subject
   group_by(subject, phase) %>%
   summarize(add_cost = sum(add_cost)) %>%
+  ungroup %>%
   # Left join with full sample (NOTE: causes NAs where no additional costs)
   merge(phases, ., by=c('subject', 'phase'), all.x = TRUE) %>%
   # Add additional cost to regular cost and remove temp column
@@ -904,7 +905,7 @@ ends <- improvement_models %>%
             min = min(p.value))
 ```
 
-Highest p-value is lower than 9^`r ends$max` and lowest lower than 10^`r ends$min`.
+Highest p-value is lower than 10^`r ends$max` and lowest lower than 10^`r ends$min`.
 
 ```{r, klshj, echo=FALSE, dependson=-1}
 improvement_models %>%
@@ -1016,34 +1017,21 @@ go_models %>%
   facet_wrap(. ~ src) +
   ylab('P(go)') +
   xlab('Prize size') +
-  theme_minimal() +
+  theme_minimal(base_size=9) +
   theme(legend.position = 'top',
         axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
         axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0))) +
   labs(color = '') +
   scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(seq(0,10,2))),
+                     breaks = 10^(0:10),
+                     minor_breaks = c(2:9 %o% 10^(5:10)),
                      labels = trans_format('log10', math_format(10^.x))) +
   scale_y_continuous(breaks = pretty_breaks(n = 11))
 
-go_models %>%
-  unnest(c(data, pred_go)) %>%
-  ggplot(aes(prize_size, pred_go, color=prize_phase)) +
-  geom_line() +
-  facet_wrap(. ~ src) +
-  ylab('P(go)') +
-  xlab('Prize size') +
-  theme_minimal() +
-  theme(legend.position = 'top',
-        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
-        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0))) +
-  labs(color = '') +
-  scale_x_continuous(trans = 'log',
-                     breaks = c(1 %o% 10^(seq(0,10,2))),
-                     labels = trans_format('log10', math_format(10^.x))) +
-  scale_y_continuous(breaks = pretty_breaks(n = 11))
 
-ggsave(file = './_figures/predict-go.eps', plot = last_plot())
+ggsave(file = './_figures/fig-01.eps', width=20, units='cm')
+ggsave(file = './_figures/fig-01.tiff', width=20, units='cm', dpi=300, scale=1, compression='lzw')
+ggsave(file = './_figures/fig-01.jpg', width=20, units='cm')
 ```
 
 All p-values are significant.
@@ -1582,8 +1570,6 @@ p <- evens %>%
   guides(color = guide_legend(nrow = 1))
 p
 
-ggsave(file = './_figures/predict-dir.eps', plot = last_plot())
-
 # Zoomed in to scenario
 p +
   coord_cartesian(ylim=c(0.895, 0.905), xlim=c(0.4, 0.6)) +
@@ -1608,19 +1594,17 @@ evens %>%
         panel.border = element_rect(color = 'grey', fill = NA, size = 0.5),
         panel.spacing = unit(0.9, 'lines')
         )
-
-ggsave(file = './_figures/predict-dir-per-src.eps', plot = last_plot())
 ```
 
 
 
 ## P(direct) (resampled)
 
-`r # 10 takes ~ 34 minutes`
+`r # NOTE: 10 takes ~ 453 minutes (~8h).`
 ```{r, V, echo=FALSE}
-V = 20 # TODO: More?
-pgos <- seq(0.5, 0.95, length.out=37)
-inefs <- seq(0, 1, length.out=21)
+V = 10
+pgos <- seq(0.5, 0.9875, length.out=40)
+inefs <- seq(0, 1, length.out=41)
 ```
 Mean cost savings of direct funding, computed by resampling:
 
@@ -1673,6 +1657,7 @@ resampled %>%
          ind = ifelse(diff > 0, 0, 1)) %>%
   group_by(src, prize_phase, pred_go, publ_inefficiency) %>%
   summarize(pdir = sum(dir) / n()) %>%
+  ungroup %>%
   ggplot(aes(publ_inefficiency, pred_go, z=pdir)) +
   facet_grid(src ~ prize_phase) +
   geom_tile(aes(fill=pdir)) +
@@ -1694,79 +1679,97 @@ resampled %>%
 
 ## Cost difference (resampled)
 
-```{r, resampled-heatmap-per-go, echo=FALSE, dependson=c('resampled'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
-f <- function (x) filter(x, minima)
-tmp <- resampled %>%
+Compute means, find minimas and fit model to minimas.
+
+```{r, resampled_diff_summary, echo=FALSE, dependson=c('resampled')}
+resampled_diff_summary <- resampled %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
-  mutate(diff = inef_dir_enpv - ind_enpv) %>%
+  mutate(diff_per_go = inef_dir_enpv - ind_enpv,
+         diff_per_me = inef_dir_enpv/prob_to - ind_enpv/prob_to) %>%
   group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
-  summarize(mean_diff = mean(diff)) %>%
-  mutate(mean_diff = mean_diff/10^6) %>%
+  summarize(mean_diff_per_go = mean(diff_per_go),
+            mean_diff_per_me = mean(diff_per_me)) %>%
+  ungroup %>%
   # Find point closest to 0, i.e. where there is no diff
   group_by(src, prize_phase, publ_inefficiency) %>%
-  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
+  mutate(minima_per_go = near(abs(mean_diff_per_go), min(abs(mean_diff_per_go))) & min(mean_diff_per_go) < 0 & max(mean_diff_per_go) > 0,
+         minima_per_me = near(abs(mean_diff_per_me), min(abs(mean_diff_per_me))) & min(mean_diff_per_me) < 0 & max(mean_diff_per_me) > 0) %>%
   ungroup
-tmp %>%
-  ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
-  facet_grid(src ~ prize_phase) +
-  geom_raster(interpolate=TRUE) +
-  geom_contour(binwidth=25, size=0.1, color='black') +
-  geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              color = 'white', size = 0.5,
-              se = FALSE,
-              method = 'nls',
-              method.args = list(formula = y ~ k + a*x + b*x^2,
-                                 start = c(k=0.5, a=1, b=-1))) +
-  scale_fill_viridis_c(direction = -1,
-                       breaks = pretty_breaks(n=10),
-                       values = rescale(c(0, max(abs(tmp$mean_diff)))),
-                       option = 'viridis',
-                       name = 'Mean cost savings (million USD)',
-                       guide = guide_colorbar(barwidth=30, title.position='top')
-                         ) +
-  scale_x_continuous(breaks = pretty_breaks(n=11)) +
-  scale_y_continuous(breaks = pretty_breaks(n=11)) +
-  ylab('P(go)') +
-  xlab('Inefficiency') +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
-        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
-        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
-        legend.position = 'top',
-        panel.spacing = unit(0, 'mm'))
-ggsave(file = './_figures/cost-savings-heatmap-per-go.eps', plot = last_plot())
 ```
 
-```{r, resampled-heatmap-per-me, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10, fig.height=12}
-tmp <- resampled %>%
-  # Only compare cost diff in projs with go-decison after intervention
-  filter(int_priv_enpv >= 0) %>%
-  mutate(diff = inef_dir_enpv/prob_to - ind_enpv/prob_to) %>%
-  group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
-  summarize(mean_diff = mean(diff)) %>%
-  mutate(mean_diff = mean_diff/10^6) %>%
-  # Find point closest to 0, i.e. where there is no diff
-  group_by(src, prize_phase, publ_inefficiency) %>%
-  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
+```{r, resampled_minima_per_go, echo=FALSE, dependson=c('resampled_diff_summary')}
+resampled_minima_per_go_model <- function (df)
+  nls(pred_go ~ k + a*publ_inefficiency + b*publ_inefficiency^2,
+      data=df,
+      start=list(k=0.5, a=1, b=-1))
+resampled_minima_per_go <- resampled_diff_summary %>%
+  filter(minima_per_go) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(minima_fit = map(data, resampled_minima_per_go_model),
+         minima_pred = map2(minima_fit, data, predict_response),
+         minima_tidied = map(minima_fit, tidy)) %>%
   ungroup
-tmp %>%
-  ggplot(aes(publ_inefficiency, pred_go, z=abs(mean_diff), fill=abs(mean_diff))) +
+resampled_minima_per_go %>%
+  unnest(c(data, minima_pred)) %>%
+  ggplot(aes(publ_inefficiency, pred_go, group=prize_phase, color=prize_phase)) +
+  facet_wrap(~src) +
+  geom_point(shape=0) +
+  geom_line(aes(y=minima_pred), color='black') +
+  ggtitle('Predicting y from x in minima per go-decision')
+
+ends <- resampled_minima_per_go %>%
+  unnest(minima_tidied) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value), min = min(p.value))
+sprintf('P-values between 10^%s and 10^%s', ends$min, ends$max)
+```
+
+```{r, resampled_minima_per_me, echo=FALSE, dependson=c('resampled_diff_summary')}
+resampled_minima_per_me_model <- function (df)
+  nls(pred_go ~ k + a*publ_inefficiency + b*publ_inefficiency^2,
+      data=df,
+      start=list(k=0.5, a=1, b=-1))
+resampled_minima_per_me <- resampled_diff_summary %>%
+  filter(minima_per_me) %>%
+  group_by(src, prize_phase) %>%
+  nest %>%
+  mutate(minima_fit = map(data, resampled_minima_per_me_model),
+         minima_pred = map2(minima_fit, data, predict_response),
+         minima_tidied = map(minima_fit, tidy)) %>%
+  ungroup
+resampled_minima_per_me %>%
+  unnest(c(data, minima_pred)) %>%
+  ggplot(aes(publ_inefficiency, pred_go, group=prize_phase, color=prize_phase)) +
+  facet_wrap(~src) +
+  geom_point(shape=0) +
+  geom_line(aes(y=minima_pred), color='black') +
+  ggtitle('Predicting y from x in minima per market entry')
+ends <- resampled_minima_per_me %>%
+  unnest(minima_tidied) %>%
+  mutate(p.value = sapply(p.value, p_lower_than)) %>%
+  summarize(max = max(p.value), min = min(p.value))
+sprintf('P-values between 10^%s and 10^%s', ends$min, ends$max)
+```
+
+```{r, resampled-heatmap-per-go, echo=FALSE, dependson=c('resampled_diff_summary', 'resampled_minima_per_go'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
+resampled_diff_summary %>%
+  filter(pred_go <= 0.95) %>% # Inluciding high P(go) essentially makes heatmap a single color
+  mutate(mean_diff_per_go = mean_diff_per_go / 10^6) %>%
+  ggplot(aes(publ_inefficiency, pred_go)) +
   facet_grid(src ~ prize_phase) +
-  geom_raster(interpolate=TRUE) +
-  geom_contour(binwidth=500, size=0.1, color='black') +
-  geom_smooth(data = f, aes(publ_inefficiency, pred_go),
-              color = 'white', size = 0.5,
-              se = FALSE,
-              method = 'nls',
-              method.args = list(formula = y ~ k + a*x + b*x^2,
-                                 start = c(k=0.5, a=1, b=-1))) +
+  geom_raster(aes(fill=abs(mean_diff_per_go)), interpolate=TRUE) +
+  geom_contour(aes(z=abs(mean_diff_per_go)), binwidth=25, size=0.1, color='black') +
+  geom_line(data = resampled_minima_per_me %>% unnest(c(data, minima_pred)),
+            aes(publ_inefficiency, minima_pred),
+            color='white', size=0.5) +
   scale_fill_viridis_c(direction = -1,
                        breaks = pretty_breaks(n=10),
-                       values = rescale(c(0, max(abs(tmp$mean_diff)))),
+                       values = rescale(c(0, max(abs(resampled_diff_summary$mean_diff_per_go)))),
                        option = 'viridis',
                        name = 'Mean cost savings (million USD)',
-                       guide = guide_colorbar(barwidth=30, title.position='top')
+                       guide = guide_colorbar(barwidth=15, title.position='top')
                          ) +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
@@ -1778,45 +1781,67 @@ tmp %>%
         axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         legend.position = 'top',
         panel.spacing = unit(0, 'mm'))
-ggsave(file = './_figures/cost-savings-heatmap-per-me.eps', plot = last_plot())
+```
+
+```{r, resampled-heatmap-per-me, echo=FALSE, dependson=c('resampled_diff_summary', 'resampled_minima_per_me'), fig.fullwidth=TRUE, fig.width=10, fig.height=12}
+resampled_diff_summary %>%
+  filter(pred_go <= 0.95) %>% # Inluciding high P(go) essentially makes heatmap a single color
+  mutate(mean_diff_per_me = mean_diff_per_me / 10^6) %>%
+  ggplot(aes(publ_inefficiency, pred_go)) +
+  facet_grid(src ~ prize_phase) +
+  geom_raster(aes(fill=abs(mean_diff_per_me)), interpolate=TRUE) +
+  geom_contour(aes(z=abs(mean_diff_per_me)), binwidth=250, size=0.1, color='black') +
+  geom_line(data = resampled_minima_per_me %>%
+              unnest(c(data, minima_pred)) %>%
+              filter(pred_go <= 0.95),
+            aes(publ_inefficiency, minima_pred),
+            color='white', size=0.5) +
+  scale_fill_viridis_c(direction = -1,
+                       #breaks = pretty_breaks(n=10),
+                       breaks = seq(500, 5000, by=500),
+                       values = rescale(c(0, max(abs(resampled_diff_summary$mean_diff_per_me)))),
+                       option = 'viridis',
+                       name = 'Mean cost savings (million USD)',
+                       guide = guide_colorbar(barwidth=20, nbin=300, title.position='top')) +
+  scale_x_continuous(breaks = pretty_breaks(n=11), expand=c(0,0)) +
+  scale_y_continuous(breaks = pretty_breaks(n=11), expand=c(0,0)) +
+  ylab('P(go)') +
+  xlab('Inefficiency') +
+  theme_minimal(base_size=9) +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
+        axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
+        axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
+        legend.position = 'top',
+        axis.ticks = element_line(size=0.1),
+        panel.spacing = unit(3, 'mm'))
+
+ggsave(file = './_figures/fig-02.eps', width=20, height=24, units='cm')
+ggsave(file = './_figures/fig-02.tiff', width=20, height=24, units='cm', dpi=300, compression='lzw')
+ggsave(file = './_figures/fig-02.jpg', width=20, height=24, units='cm')
 ```
 
 ### Limits
-```{r, resampled-heatmap-limits-per-me, echo=FALSE, dependson='resampled', fig.fullwidth=TRUE, fig.width=10}
-tmp <- resampled %>%
-  # Only compare cost diff in projs with go-decison after intervention
-  filter(int_priv_enpv >= 0) %>%
-  mutate(diff = inef_dir_enpv/prob_to - ind_enpv/prob_to) %>%
-  group_by(src, prize_phase, prize_size, pred_go, publ_inefficiency) %>%
-  summarize(mean_diff = mean(diff)) %>%
-  mutate(mean_diff = mean_diff/10^6) %>%
-  # Find point closest to 0, i.e. where there is no diff
-  group_by(src, prize_phase, publ_inefficiency) %>%
-  mutate(minima = near(abs(mean_diff), min(abs(mean_diff))) & min(mean_diff) < 0 & max(mean_diff) > 0) %>%
-  ungroup %>%
-  f
-tmp %>%
-  ggplot(aes(publ_inefficiency, pred_go, z=mean_diff, color=src)) +
-  facet_grid(~ prize_phase) +
-  geom_smooth(aes(publ_inefficiency, pred_go),
-              size = 0.5,
-              se = FALSE,
-              method = 'nls',
-              method.args = list(formula = y ~ k + a*x + b*x^2,
-                                 start = c(k=0.5, a=1, b=-1))) +
+```{r, resampled-heatmap-limits-per-me, echo=FALSE, dependson='resampled_minima_per_me', fig.fullwidth=TRUE, fig.width=10}
+resampled_minima_per_me %>%
+  unnest(c(data, minima_pred)) %>%
+  ggplot(aes(publ_inefficiency, minima_pred, color=src)) +
+  facet_wrap(~ prize_phase, nrow=1) +
+  geom_line() +
   scale_x_continuous(breaks = pretty_breaks(n=11)) +
   scale_y_continuous(breaks = pretty_breaks(n=11)) +
   ylab('P(go)') +
   xlab('Inefficiency') +
-  theme_minimal() +
+  theme_minimal(base_size=9) +
   guides(color = guide_legend(nrow=1, title=NULL)) +
   theme(legend.position = 'top',
         axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         axis.title.x = element_text(margin = margin(t=8, r=0, b=0, l=0)),
         axis.title.y = element_text(margin = margin(t=0, r=8, b=0, l=0)),
         panel.spacing = unit(0.9, 'lines')
-        ) +
-ggsave(file = './_figures/cost-savings-limits-per-me.eps', plot = last_plot())
+        )
+ggsave(file = './_figures/fig-03.eps', width=20, height=10, units='cm')
+ggsave(file = './_figures/fig-03.tiff', width=20, height=10, units='cm', compression='lzw')
+ggsave(file = './_figures/fig-03.jpg', width=20, height=10, units='cm')
 ```
 
 
@@ -2454,7 +2479,8 @@ tmp <- scenario %>%
   summarize(dir = sum(ifelse((inef_dir_enpv - ind_enpv) > 0, 1, 0 )),
             ind = sum(ifelse((inef_dir_enpv - ind_enpv) > 0, 0, 1)),
             pdir = dir / n(),
-            pind = ind / n())
+            pind = ind / n()) %>%
+  ungroup
 
 tmp %>%
   select(src, prize_phase, pdir) %>%
@@ -2487,7 +2513,8 @@ tmp <- scenario %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv))
+  summarize(mean_diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  ungroup
 tmp %>%
   mutate(mean_diff = round(mean_diff/10^6, 2)) %>%
   spread(prize_phase, mean_diff) %>%
@@ -2527,7 +2554,6 @@ scenario %>%
         axis.text.x = element_text(angle=90, vjust=0.5, hjust=1),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
-ggsave(file = './_figures/scenario-hist.eps', plot = last_plot())
 ```
 
 
@@ -2537,7 +2563,8 @@ tmp <- scenario %>%
   # Only compare cost diff in projs with go-decison after intervention
   filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
-  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to))
+  summarize(mean_diff = mean(inef_dir_enpv/prob_to - ind_enpv/prob_to)) %>%
+  ungroup
 tmp %>%
   mutate(mean_diff = round(mean_diff/10^6, 0)) %>%
   spread(prize_phase, mean_diff) %>%
@@ -2595,9 +2622,11 @@ scenario %>%
   ylab('Cost of funding (million USD)') +
   coord_flip() +
   guides(fill=guide_legend(nrow=1, title=NULL)) +
-  theme_minimal() +
+  theme_minimal(base_size=9) +
   theme(legend.position = 'top')
-ggsave(file = './_figures/scenario-costs.eps', plot = last_plot())
+ggsave(file = './_figures/fig-04.eps', width=20, height=14, units='cm')
+ggsave(file = './_figures/fig-04.jpg', width=20, height=14, units='cm')
+ggsave(file = './_figures/fig-04.tiff', width=20, height=14,  units='cm', dpi=300, compression='lzw')
 ```
 
 ```{r, scenario_costs, dependson='scenario', echo=FALSE, fig.fullwidth=TRUE, fig.width=10}
@@ -2717,6 +2746,7 @@ resampled <- scenario %>%
   filter(int_priv_enpv >= 0) %>%
   group_by(src, prize_phase) %>%
   summarize(diff = mean(inef_dir_enpv - ind_enpv)) %>%
+  ungroup %>%
   mutate(diff = round(diff/10^6))
 
 bind_rows(predicted %>% mutate(type = 'predicted'),
@@ -2749,7 +2779,8 @@ resampled <- scenario %>%
             median_resampled = median(inef_dir_enpv - ind_enpv),
             hi_resampled = mean_resampled + sd(inef_dir_enpv - ind_enpv),
             lo_resampled = mean_resampled - sd(inef_dir_enpv - ind_enpv)
-            )
+            ) %>%
+  ungroup
 
 merge(predicted, resampled) %>%
   ggplot(aes(prize_phase, pred)) +
