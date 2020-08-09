@@ -12,6 +12,7 @@ install.packages('ggpubr')
 install.packages('remotes')
 remotes::install_github('rstudio/rmarkdown')
 install.packages('bookdown')
+install.packages('viridis')
 
 # For better nls (nlsLM)
 # See: https://rmazing.wordpress.com/2012/07/05/a-better-nls/
